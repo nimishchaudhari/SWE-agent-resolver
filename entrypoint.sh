@@ -238,6 +238,12 @@ fi
 
 log "🤖 Running SWE-Agent with model: $MODEL_NAME"
 
+# Prepare model-specific parameters
+MODEL_PARAMS=()
+if [[ "$MODEL_NAME" == "o1" || "$MODEL_NAME" == "o3" || "$MODEL_NAME" == "o3-mini" || "$MODEL_NAME" == "o4-mini" ]]; then
+    MODEL_PARAMS+=("--agent.model.top_p" "null" "--agent.model.temperature" "1.0")
+fi
+
 # Execute SWE-Agent with correct 1.0+ command format
 sweagent run \
     --agent.model.name "$MODEL_NAME" \
@@ -248,6 +254,7 @@ sweagent run \
     --output_dir "$OUTPUT_DIR" \
     --config /app/swe-agent/config/default.yaml \
     --actions.apply_patch_locally false \
+    "${MODEL_PARAMS[@]}" \
     2>&1 | tee "$OUTPUT_DIR/swe_agent.log"
 
 SWE_EXIT_CODE=${PIPESTATUS[0]}
