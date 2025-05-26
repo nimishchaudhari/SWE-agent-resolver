@@ -237,8 +237,76 @@ fi
 # --- End Diagnostic Checks ---
 
 log "🤖 Running SWE-Agent with model: $MODEL_NAME"
+# Function to update GitHub comment with retry logic
+update_comment_with_retry() {
+    local comment_id="$1"
+    local message="$2"
+    local max_retries=5
+    local retry_delay=2
+    local attempt=1
 
-# Execute SWE-Agent with correct 1.0+ command format
+    while [ $attempt -le $max_retries ]; do
+        local json_payload=$(jq -n --arg body "$message" '{body: $body}')
+        local response=$(curl -s -X PATCH \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" \
+            -d "$json_payload")
+
+        if [ $? -eq 0 ]; then
+            return 0
+        else
+            log "⚠️ Failed to update comment on GitHub, attempt $attempt of $max_retries"
+            sleep $retry_delay
+            attempt=$((attempt + 1))
+        fi
+    done
+
+    log "❌ All attempts to update comment failed"
+    return 1
+}
+
+# Function to parse and format output for GitHub comment
+parse_output_for_comment() {
+    local raw_output="$1"
+    # Simple parsing: filter lines with keywords and format markdown
+    # This can be enhanced with more sophisticated parsing if needed
+    echo "<details><summary>Output Preview</summary>\n\n<pre style='max-height: 300px; overflow-y: scroll;'>"
+    echo "$raw_output" | grep -E "(error|fail|warn|patch|diff|fix|issue|problem|exception|traceback)" -i || echo "No important messages yet..."
+    echo "</pre>\n</details>"
+}
+
+# Function to stream sweagent output and update comment
+stream_sweagent_output() {
+    local comment_id="$1"
+    local output_file="$2"
+    local temp_buffer=""
+    local last_update_time=0
+    local update_interval=10  # seconds
+    local max_comment_length=60000
+
+    tail -n +1 -F "$output_file" | while IFS= read -r line; do
+        temp_buffer+="$line\n"
+        current_time=$(date +%s)
+        if (( current_time - last_update_time >= update_interval )); then
+            # Parse and format output
+            local formatted_output=$(parse_output_for_comment "$temp_buffer")
+
+            # Truncate if too long
+            if [ ${#formatted_output} -gt $max_comment_length ]; then
+                formatted_output="${formatted_output:0:$max_comment_length}\n... (truncated)"
+            fi
+
+            # Update comment
+            update_comment_with_retry "$comment_id" "$formatted_output"
+            last_update_time=$current_time
+        fi
+    done
+}
+
+# Run sweagent and stream output
+OUTPUT_LOG="$OUTPUT_DIR/swe_agent.log"
+
 sweagent run \
     --agent.model.name "$MODEL_NAME" \
     --agent.model.per_instance_cost_limit 2.0 \
@@ -248,36 +316,19 @@ sweagent run \
     --output_dir "$OUTPUT_DIR" \
     --config /app/swe-agent/config/default.yaml \
     --actions.apply_patch_locally false \
-    2>&1 | tee "$OUTPUT_DIR/swe_agent.log"
+    > >(tee "$OUTPUT_LOG" >&1) 2>&1 &
 
-SWE_EXIT_CODE=${PIPESTATUS[0]}
+SWE_PID=$!
 
-if [ $SWE_EXIT_CODE -eq 0 ]; then
-    log "✅ SWE-Agent completed successfully"
-    
-    start_time_file="$TEMP_DIR/start_time"
-    elapsed_minutes_str="N/A"
-    if [ -f "$start_time_file" ]; then
-        start_time_val=$(cat "$start_time_file")
-        current_time_val=$(date +%s)
-        if [[ "$start_time_val" =~ ^[0-9]+$ ]] && [[ "$current_time_val" =~ ^[0-9]+$ ]] && [ "$start_time_val" -le "$current_time_val" ]; then
-            elapsed_seconds=$((current_time_val - start_time_val))
-            elapsed_minutes=$((elapsed_seconds / 60))
-            if [ "$elapsed_minutes" -gt 0 ]; then
-                elapsed_minutes_str="${elapsed_minutes} minutes"
-            elif [ "$elapsed_seconds" -gt 0 ]; then
-                elapsed_minutes_str="${elapsed_seconds} seconds"
-            else
-                elapsed_minutes_str="< 1 second"
-            fi
-        fi
-    fi
-    
-    # Look for patches in SWE-Agent 1.0 output format
-    PATCH_FOUND=false
-    PATCH_CONTENT=""
-    
-    # Check for .patch files
+# Start streaming output to GitHub comment
+stream_sweagent_output "$PROGRESS_COMMENT_ID" "$OUTPUT_LOG" &
+
+wait $SWE_PID
+SWE_EXIT_CODE=$?
+
+
+
+
     for patch_file in $(find "$OUTPUT_DIR" -name "*.patch" 2>/dev/null || true); do
         if [ -s "$patch_file" ]; then
             PATCH_CONTENT=$(cat "$patch_file")
