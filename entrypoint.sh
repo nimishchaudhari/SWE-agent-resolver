@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+set -o pipefail
 
 # --- Configuration ---
 GITHUB_TOKEN="${INPUT_GITHUB_TOKEN}"
@@ -236,28 +237,37 @@ fi
 log "🤖 Running SWE-Agent with model: $MODEL_NAME"
 
 # Execute SWE-Agent with correct 1.0+ command format
-python -m sweagent.cli.main run \
-    --agent.model.name "$MODEL_NAME" \
-    --agent.model.per_instance_cost_limit 2.0 \
-    --env.repo.path "$REPO_DIR" \
-    --problem_statement.path "$PROBLEM_STATEMENT_FILE" \
-    --output_dir "$OUTPUT_DIR" \
-    --config /app/swe-agent/config/default.yaml \
+sweagent run \\
+    --agent.model.name "$MODEL_NAME" \\
+    --agent.model.per_instance_cost_limit 2.0 \\
+    --env.repo.path "$REPO_DIR" \\
+    --problem_statement.path "$PROBLEM_STATEMENT_FILE" \\
+    --output_dir "$OUTPUT_DIR" \\
+    --config /app/swe-agent/config/default.yaml \\
     2>&1 | tee "$OUTPUT_DIR/swe_agent.log"
 
-SWE_EXIT_CODE=$?
+SWE_EXIT_CODE=${PIPESTATUS[0]}
 
 if [ $SWE_EXIT_CODE -eq 0 ]; then
     log "✅ SWE-Agent completed successfully"
     
-    # Update progress comment with completion status
-    local start_time_file="$TEMP_DIR/start_time"
-    local elapsed_minutes=0
+    start_time_file="$TEMP_DIR/start_time"
+    elapsed_minutes_str="N/A"
     if [ -f "$start_time_file" ]; then
-        local start_time=$(cat "$start_time_file")
-        elapsed_minutes=$(( ($(date +%s) - start_time) / 60 ))
+        start_time_val=$(cat "$start_time_file")
+        current_time_val=$(date +%s)
+        if [[ "$start_time_val" =~ ^[0-9]+$ ]] && [[ "$current_time_val" =~ ^[0-9]+$ ]] && [ "$start_time_val" -le "$current_time_val" ]; then
+            elapsed_seconds=$((current_time_val - start_time_val))
+            elapsed_minutes=$((elapsed_seconds / 60))
+            if [ "$elapsed_minutes" -gt 0 ]; then
+                elapsed_minutes_str="${elapsed_minutes} minutes"
+            elif [ "$elapsed_seconds" -gt 0 ]; then
+                elapsed_minutes_str="${elapsed_seconds} seconds"
+            else
+                elapsed_minutes_str="< 1 second"
+            fi
+        fi
     fi
-    update_progress "✅ **Analysis complete!** Processing results..." "$elapsed_minutes" "$OUTPUT_DIR/swe_agent.log"
     
     # Look for patches in SWE-Agent 1.0 output format
     PATCH_FOUND=false
@@ -310,7 +320,7 @@ if [ $SWE_EXIT_CODE -eq 0 ]; then
 
 **Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
 **Model:** ${MODEL_NAME}
-**Execution Time:** Complete
+**Execution Time:** ${elapsed_minutes_str}
 
 ## 🔧 Generated Patch
 \`\`\`diff
@@ -357,6 +367,7 @@ EOF
 **Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
 **Model:** ${MODEL_NAME}
 **Result:** Analysis completed but no patch generated
+**Execution Time:** ${elapsed_minutes_str}
 
 ## 🔍 Analysis Results
 I've analyzed the issue but didn't generate a code patch. This might mean:
@@ -391,11 +402,22 @@ Feel free to comment with additional information and trigger the agent again!
     
 else
     # SWE-Agent failed - determine the cause and update progress comment
-    local start_time_file="$TEMP_DIR/start_time"
-    local elapsed_minutes=0
+    start_time_file="$TEMP_DIR/start_time"
+    run_duration_str="N/A"
     if [ -f "$start_time_file" ]; then
-        local start_time=$(cat "$start_time_file")
-        elapsed_minutes=$(( ($(date +%s) - start_time) / 60 ))
+        start_time_s=$(cat "$start_time_file")
+        current_time_s=$(date +%s)
+        if [[ "$start_time_s" =~ ^[0-9]+$ ]] && [[ "$current_time_s" =~ ^[0-9]+$ ]] && [ "$start_time_s" -le "$current_time_s" ]; then
+            run_seconds=$((current_time_s - start_time_s))
+            elapsed_minutes_val=$((run_seconds / 60))
+            if [ "$elapsed_minutes_val" -gt 0 ]; then
+                run_duration_str="${elapsed_minutes_val} minutes"
+            elif [ "$run_seconds" -gt 0 ]; then
+                run_duration_str="${run_seconds} seconds"
+            else
+                run_duration_str="< 1 second"
+            fi
+        fi
     fi
     
     if [ $SWE_EXIT_CODE -eq 124 ]; then
@@ -405,7 +427,7 @@ else
 
 **Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}  
 **Model:** ${MODEL_NAME}
-**Result:** Process took longer than expected.
+**Result:** Process took longer than expected (actual runtime: ${run_duration_str}).
 
 ## ⏱️ What Happened
 The analysis took longer than the configured timeout and was stopped. This is a fallback, and ideally, the agent should manage its own execution time.
@@ -426,7 +448,7 @@ The analysis took longer than the configured timeout and was stopped. This is a 
 Comment \`@swe-agent\` with a more focused request!
 
 ---
-*⏰ SWE-Agent using $MODEL_NAME*"
+*⏰ SWE-Agent using $MODEL_NAME (runtime: ${run_duration_str})*"
         
         # Update progress comment with timeout message
         if [ -n "$PROGRESS_COMMENT_ID" ]; then
@@ -444,7 +466,7 @@ Comment \`@swe-agent\` with a more focused request!
 
 **Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
 **Model:** ${MODEL_NAME}  
-**Result:** Process was terminated due to hanging or resource limits
+**Result:** Process was terminated (likely due to hanging or resource limits, runtime: ${run_duration_str})
 
 ## ⚠️ What Happened
 The analysis process was terminated because it appeared to be hanging or consuming too many resources.
@@ -467,7 +489,7 @@ The analysis process was terminated because it appeared to be hanging or consumi
 Comment \`@swe-agent\` with a more targeted, specific request!
 
 ---
-*💀 SWE-Agent using $MODEL_NAME*"
+*💀 SWE-Agent using $MODEL_NAME (runtime: ${run_duration_str})*"
         
         # Update progress comment with killed message
         if [ -n "$PROGRESS_COMMENT_ID" ]; then
@@ -517,6 +539,7 @@ $(tail -10 "$OUTPUT_DIR/swe_agent.log" 2>/dev/null || echo "Could not read log f
 **Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
 **Model:** ${MODEL_NAME}
 **Exit Code:** ${SWE_EXIT_CODE}
+**Runtime:** ${run_duration_str}
 
 ## 🚨 What Happened
 I encountered an error while trying to analyze and fix this issue.
@@ -552,7 +575,7 @@ ${LOG_PREVIEW}
 Comment \`@swe-agent\` with additional context or a rephrased request!
 
 ---
-*❌ SWE-Agent using $MODEL_NAME*"
+*❌ SWE-Agent using $MODEL_NAME (runtime: ${run_duration_str})*"
         
         # Update progress comment with failure message
         if [ -n "$PROGRESS_COMMENT_ID" ]; then
