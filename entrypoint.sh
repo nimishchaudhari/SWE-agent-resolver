@@ -237,13 +237,13 @@ fi
 log "🤖 Running SWE-Agent with model: $MODEL_NAME"
 
 # Execute SWE-Agent with correct 1.0+ command format
-sweagent run \\
-    --agent.model.name "$MODEL_NAME" \\
-    --agent.model.per_instance_cost_limit 2.0 \\
-    --env.repo.path "$REPO_DIR" \\
-    --problem_statement.path "$PROBLEM_STATEMENT_FILE" \\
-    --output_dir "$OUTPUT_DIR" \\
-    --config /app/swe-agent/config/default.yaml \\
+sweagent run \
+    --agent.model.name "$MODEL_NAME" \
+    --agent.model.per_instance_cost_limit 2.0 \
+    --env.repo.path "$REPO_DIR" \
+    --problem_statement.path "$PROBLEM_STATEMENT_FILE" \
+    --output_dir "$OUTPUT_DIR" \
+    --config /app/swe-agent/config/default.yaml \
     2>&1 | tee "$OUTPUT_DIR/swe_agent.log"
 
 SWE_EXIT_CODE=${PIPESTATUS[0]}
