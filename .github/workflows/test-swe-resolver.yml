@@ -14,11 +14,8 @@ jobs:
     if: github.event.comment.user.login != 'github-actions[bot]'
     steps:
       - name: Run SWE-Agent Resolver Action
-        # Use your actual action repo and tag or branch
         uses: nimishchaudhari/SWE-agent-resolver@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           llm_api_key: ${{ secrets.OPENAI_API_KEY }}
-          model_name: 'gpt-4o'
-          # trigger_phrase: '@swe-agent' # Optional
-          # swe_agent_args: ''           # Optional
+          model_name: ${{ vars.SWE_AGENT_MODEL }}  # Use vars for environment variables

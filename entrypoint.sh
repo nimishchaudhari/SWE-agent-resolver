@@ -71,8 +71,7 @@ PROBLEM_FILE_PATH="${TEMP_DIR}/problem_description.md"
 TARGET_REPO_CLONE_PATH="${TEMP_DIR}/repo"
 # Define PROBLEM_ID based on the problem description file name
 PROBLEM_ID=$(basename "${PROBLEM_FILE_PATH}" .md)
-# Define the expected path for the output patch file
-SWE_AGENT_OUTPUT_PATCH="${TEMP_DIR}/${PROBLEM_ID}/${PROBLEM_ID}.patch"
+# Note: Actual PROBLEM_ID will be detected dynamically from SWE-agent output structure
 
 echo "Fetching issue details from GitHub API..."
 ISSUE_API_URL="${GH_API_URL}/repos/${REPO_FULL_NAME}/issues/${ISSUE_NUMBER}"
@@ -111,7 +110,8 @@ SWE_AGENT_COMMAND=(
     "--env.repo.path" "${TARGET_REPO_CLONE_PATH}"
     "--output_dir" "${TEMP_DIR}" # Use --output_dir instead of --output_patch_file
     "--env.deployment.type=local" # Force local execution for testing
-    # Potentially add: --config config/default.yaml if needed and available
+    "--actions.apply_patch_locally=false" # Don't apply locally, just save the patch
+    "--config" "/app/swe-agent/config/default.yaml" # Use default config to ensure proper setup
 )
 
 # Append additional user-provided arguments, if any
@@ -137,6 +137,28 @@ echo "Returning to original working directory ${ORIGINAL_PWD}..."
 cd "${ORIGINAL_PWD}"
 
 echo "SWE-agent execution finished with exit code: ${AGENT_EXIT_CODE}."
+
+# Dynamically detect the actual problem ID from SWE-agent output directory structure
+echo "Detecting actual problem ID from output directory structure..."
+ACTUAL_PROBLEM_DIRS=$(find "${TEMP_DIR}" -maxdepth 1 -type d -name "*" | grep -v "^${TEMP_DIR}$" | grep -v "^${TEMP_DIR}/repo$")
+if [ -n "$ACTUAL_PROBLEM_DIRS" ]; then
+    ACTUAL_PROBLEM_ID=$(basename "$(echo "$ACTUAL_PROBLEM_DIRS" | head -n 1)")
+    echo "Detected actual problem ID: ${ACTUAL_PROBLEM_ID}"
+    # Update PROBLEM_ID to the actual one detected
+    PROBLEM_ID="$ACTUAL_PROBLEM_ID"
+else
+    echo "No problem-specific subdirectories found, using original PROBLEM_ID: ${PROBLEM_ID}"
+fi
+
+# Debug: Show what files were created in the output directory
+echo "--- Debug: Contents of output directory ${TEMP_DIR} ---"
+echo "Directory structure:"
+find "${TEMP_DIR}" -type d | head -20
+echo "All files (limited to first 50):"
+find "${TEMP_DIR}" -type f | head -50 | while read file; do
+    echo "  $file ($(stat -c%s "$file" 2>/dev/null || echo "unknown") bytes)"
+done
+echo "--- End Debug ---"
 # The log is now streamed, but we can keep this for a final full log record if desired,
 # or remove the cat block if the streamed output is sufficient.
 echo "--- SWE-agent Log (also streamed during execution) ---"
@@ -148,9 +170,99 @@ RESULT_MESSAGE=""
 SUCCESS=false
 
 if [ "$AGENT_EXIT_CODE" -eq 0 ]; then
-    if [ -s "$SWE_AGENT_OUTPUT_PATCH" ]; then
-        echo "Patch file found at '${SWE_AGENT_OUTPUT_PATCH}'."
-        PATCH_CONTENT=$(cat "$SWE_AGENT_OUTPUT_PATCH")
+    # Look for patch files in multiple possible locations
+    PATCH_FOUND=false
+    PATCH_CONTENT=""
+    
+    echo "=== Patch Detection Process ==="
+    echo "Using PROBLEM_ID: ${PROBLEM_ID}"
+    
+    # Try different patch file locations that SWE-agent might use
+    POSSIBLE_PATCH_LOCATIONS=(
+        "${TEMP_DIR}/${PROBLEM_ID}/${PROBLEM_ID}.patch"
+        "${TEMP_DIR}/${PROBLEM_ID}/patches/${PROBLEM_ID}.patch"
+        "${TEMP_DIR}/patches/${PROBLEM_ID}.patch"
+        "${TEMP_DIR}/${PROBLEM_ID}.patch"
+        "${TEMP_DIR}/patch.diff"
+        "${TEMP_DIR}/${PROBLEM_ID}/patch.diff"
+        "${TEMP_DIR}/output.patch"
+        "${TEMP_DIR}/${PROBLEM_ID}/output.patch"
+    )
+    
+    echo "Looking for patch files in the following locations:"
+    for patch_location in "${POSSIBLE_PATCH_LOCATIONS[@]}"; do
+        echo "  Checking: ${patch_location}"
+        if [ -s "$patch_location" ]; then
+            echo "✓ Patch file found at '${patch_location}' ($(stat -c%s "$patch_location" 2>/dev/null || echo "unknown") bytes)."
+            PATCH_CONTENT=$(cat "$patch_location")
+            PATCH_FOUND=true
+            SWE_AGENT_OUTPUT_PATCH="$patch_location"
+            break
+        else
+            echo "  - Not found or empty"
+        fi
+    done
+    
+    # Also check for any .patch files in the output directory
+    if [ "$PATCH_FOUND" = false ]; then
+        echo "Searching for any .patch files in ${TEMP_DIR}..."
+        PATCH_FILES=$(find "${TEMP_DIR}" -name "*.patch" -type f)
+        if [ -n "$PATCH_FILES" ]; then
+            echo "Found .patch files:"
+            echo "$PATCH_FILES" | while read -r patch_file; do
+                echo "  - ${patch_file} ($(stat -c%s "$patch_file" 2>/dev/null || echo "unknown") bytes)"
+            done
+            FIRST_PATCH=$(echo "$PATCH_FILES" | head -n 1)
+            if [ -s "$FIRST_PATCH" ]; then
+                echo "✓ Using first patch file: '${FIRST_PATCH}'."
+                PATCH_CONTENT=$(cat "$FIRST_PATCH")
+                PATCH_FOUND=true
+                SWE_AGENT_OUTPUT_PATCH="$FIRST_PATCH"
+            fi
+        else
+            echo "No .patch files found in output directory."
+        fi
+    fi
+    
+        # If no .patch files found, try to extract patch from .pred files (JSON format)
+    if [ "$PATCH_FOUND" = false ]; then
+        echo "No .patch files found, checking for .pred files..."
+        PRED_FILES=$(find "${TEMP_DIR}" -name "*.pred" -type f)
+        if [ -n "$PRED_FILES" ]; then
+            echo "Found .pred files:"
+            echo "$PRED_FILES" | while read -r pred_file; do
+                echo "  - ${pred_file} ($(stat -c%s "$pred_file" 2>/dev/null || echo "unknown") bytes)"
+            done
+            FIRST_PRED=$(echo "$PRED_FILES" | head -n 1)
+            if [ -s "$FIRST_PRED" ]; then
+                echo "Analyzing prediction file: '${FIRST_PRED}'..."
+                # Extract model_patch from JSON using jq, handle both string and null cases
+                PATCH_CONTENT=$(jq -r '.model_patch // empty' "$FIRST_PRED" 2>/dev/null | grep -v '^null$' | head -c 1000000)
+                if [ -n "$PATCH_CONTENT" ] && [ "$PATCH_CONTENT" != "null" ] && [ "$PATCH_CONTENT" != "" ]; then
+                    echo "✓ Successfully extracted patch from 'model_patch' field."
+                    PATCH_FOUND=true
+                    SWE_AGENT_OUTPUT_PATCH="$FIRST_PRED"
+                else
+                    echo "No valid patch in 'model_patch' field, trying alternative fields..."
+                    # Try alternative JSON fields that might contain patch data
+                    PATCH_CONTENT=$(jq -r '.patch // .diff // .solution // empty' "$FIRST_PRED" 2>/dev/null | grep -v '^null$' | head -c 1000000)
+                    if [ -n "$PATCH_CONTENT" ] && [ "$PATCH_CONTENT" != "null" ] && [ "$PATCH_CONTENT" != "" ]; then
+                        echo "✓ Successfully extracted patch from alternative field."
+                        PATCH_FOUND=true
+                        SWE_AGENT_OUTPUT_PATCH="$FIRST_PRED"
+                    else
+                        echo "No patch data found in any known JSON fields."
+                    fi
+                fi
+            fi
+        else
+            echo "No .pred files found in output directory."
+        fi
+    fi
+    
+    echo "=== End Patch Detection Process ==="
+    
+    if [ "$PATCH_FOUND" = true ] && [ -n "$PATCH_CONTENT" ]; then
         MAX_PATCH_DISPLAY_LENGTH=60000
         if [ ${#PATCH_CONTENT} -gt $MAX_PATCH_DISPLAY_LENGTH ]; then
             PATCH_CONTENT_DISPLAY="$(echo "$PATCH_CONTENT" | head -c $MAX_PATCH_DISPLAY_LENGTH)\n\n... (patch truncated)"
@@ -160,7 +272,9 @@ if [ "$AGENT_EXIT_CODE" -eq 0 ]; then
         RESULT_MESSAGE="✅ SWE-agent completed successfully and generated the following patch:\n\n\`\`\`diff\n${PATCH_CONTENT_DISPLAY}\n\`\`\`\n\n"
         SUCCESS=true
     else
-        echo "SWE-agent completed successfully, but no patch file was found or it was empty at '${SWE_AGENT_OUTPUT_PATCH}'."
+        echo "SWE-agent completed successfully, but no patch file was found or it was empty."
+        echo "Contents of output directory:"
+        find "${TEMP_DIR}" -type f -exec ls -la {} \;
         RESULT_MESSAGE="✅ SWE-agent completed successfully, but did not produce a patch file. See logs for details.\n\n"
         SUCCESS=true
     fi
