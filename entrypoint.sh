@@ -69,7 +69,10 @@ TEMP_DIR="/tmp/swe_agent_run_$$" # Unique temp dir for this run
 mkdir -p "$TEMP_DIR"
 PROBLEM_FILE_PATH="${TEMP_DIR}/problem_description.md"
 TARGET_REPO_CLONE_PATH="${TEMP_DIR}/repo"
-SWE_AGENT_OUTPUT_PATCH="${TEMP_DIR}/solution.diff"
+# Define PROBLEM_ID based on the problem description file name
+PROBLEM_ID=$(basename "${PROBLEM_FILE_PATH}" .md)
+# Define the expected path for the output patch file
+SWE_AGENT_OUTPUT_PATCH="${TEMP_DIR}/${PROBLEM_ID}/${PROBLEM_ID}.patch"
 
 echo "Fetching issue details from GitHub API..."
 ISSUE_API_URL="${GH_API_URL}/repos/${REPO_FULL_NAME}/issues/${ISSUE_NUMBER}"
@@ -102,11 +105,11 @@ echo "Repository cloned."
 echo "Preparing to run SWE-agent..."
 
 SWE_AGENT_COMMAND=(
-    "python" "-m" "sweagent.run.run"
+    "python" "-m" "sweagent" "run"
     "--agent.model.name" "${INPUT_MODEL_NAME}"
     "--problem_statement.path" "${PROBLEM_FILE_PATH}"  # Corrected from .file_path to .path
     "--env.repo.path" "${TARGET_REPO_CLONE_PATH}"
-    "--output_patch_file" "${SWE_AGENT_OUTPUT_PATCH}" # Kept as is, assuming it's valid for the run module
+    "--output_dir" "${TEMP_DIR}" # Use --output_dir instead of --output_patch_file
     # Potentially add: --config config/default.yaml if needed and available
 )
 
