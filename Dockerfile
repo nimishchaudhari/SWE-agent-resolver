@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     curl \
     patch \
+    docker.io \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
