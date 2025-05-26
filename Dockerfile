@@ -22,6 +22,9 @@ RUN ls -la /app/swe-agent # Debug: List contents of the cloned directory
 # If SWE-agent uses submodules:
 # RUN cd swe-agent && git submodule update --init --recursive
 
+# Install SWE-agent from the cloned source
+RUN cd /app/swe-agent && pip install . && cd /app
+
 # Install SWE-agent dependencies.
 # Ensure requirements.txt is at the root of SWE-agent or adjust path.
 # Some agents require specific versions of torch, etc. This might need adjustment

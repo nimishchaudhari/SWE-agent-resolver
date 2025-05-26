@@ -114,7 +114,7 @@ echo "Preparing to run SWE-agent..."
 
 # Construct the SWE-agent command.
 SWE_AGENT_COMMAND=(
-    "sweagent" # Use the installed script name
+    "python" "-m" "sweagent.run.run" # Use python -m to invoke the module
     "--model_name" "${INPUT_MODEL_NAME}"
     "--data_path" "${PROBLEM_FILE_PATH}"
     "--repo_path" "${TARGET_REPO_CLONE_PATH}"
