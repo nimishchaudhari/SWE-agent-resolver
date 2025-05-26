@@ -5,10 +5,17 @@ on:
   issue_comment:
     types: [created]
 
+permissions:
+  issues: write
+  contents: write
+  pull-requests: write
+
 jobs:
   generate-patch:
-    if: github.event.issue.pull_request == null && contains(github.event.comment.body, '@swe-agent')
+    name: Generate Patch with SWE-Agent
+    if: github.event.issue.pull_request == null && contains(github.event.comment.body, '@swe-agent') && github.event.comment.user.login != 'github-actions[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     
     outputs:
       patch_generated: ${{ steps.swe-agent.outputs.patch_generated }}
@@ -24,17 +31,20 @@ jobs:
       
       - name: Run SWE-Agent
         id: swe-agent
-        uses: your-username/swe-agent-resolver@main
+        uses: nimishchaudhari/swe-agent-resolver@main  # Replace with your-username/swe-agent-resolver@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          llm_api_key: ${{ secrets.OPENAI_API_KEY }}
-          model_name: 'gpt-4o'
+          llm_api_key: ${{ secrets.OPENAI_API_KEY }}  # Set this as a repository secret
+          model_name: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}  # Optionally set SWE_AGENT_MODEL as a repository variable
           trigger_phrase: '@swe-agent'
+          timeout_minutes: 45
 
   apply-patch:
+    name: Apply Patch and Create PR
     needs: generate-patch
     if: needs.generate-patch.outputs.patch_generated == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     
     steps:
       - name: Checkout repository
@@ -43,10 +53,17 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
       
-      - name: Set up Python (optional, for linting)
+      - name: Set up Python (for linting)
         uses: actions/setup-python@v4
         with:
           python-version: '3.x'
+      
+      - name: Install GitHub CLI
+        run: |
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh
       
       - name: Install linting tools (optional)
         run: |
@@ -58,17 +75,17 @@ jobs:
           PATCH_CONTENT: ${{ needs.generate-patch.outputs.patch_content }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
-          MODEL_NAME: 'gpt-4o'
+          MODEL_NAME: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}
           EXECUTION_TIME: ${{ needs.generate-patch.outputs.execution_time }}
         run: |
           set -e
           
           # Configure git
-          git config --global user.name "swe-agent-bot"
-          git config --global user.email "swe-agent-bot@users.noreply.github.com"
+          git config --global user.name "swe-agent-bot[bot]"
+          git config --global user.email "swe-agent-bot[bot]@users.noreply.github.com"
           
           # Create branch
-          BRANCH_NAME="swe-agent-fix-$(date +%s)"
+          BRANCH_NAME="swe-agent-fix-issue-${ISSUE_NUMBER}-$(date +%s)"
           git checkout -b "$BRANCH_NAME"
           
           # Apply patch
@@ -84,6 +101,12 @@ jobs:
             
             if command -v isort >/dev/null 2>&1; then
               find . -name "*.py" -exec isort {} + || true
+            fi
+            
+            # Check if there are any changes to commit
+            if git diff --cached --quiet && git diff --quiet; then
+              echo "No changes detected after applying patch"
+              exit 1
             fi
             
             # Commit changes
@@ -106,9 +129,9 @@ Execution Time: ${EXECUTION_TIME}"
 **Execution Time:** ${EXECUTION_TIME}
 
 ## 🔧 Generated Patch
-\`\`\`diff
+\\\`\\\`\\\`diff
 ${PATCH_CONTENT}
-\`\`\`
+\\\`\\\`\\\`
 
 ## 📝 Next Steps
 1. **Review** the changes in this PR
@@ -140,9 +163,9 @@ ${PATCH_CONTENT}
 **Pull Request:** [View PR](${PR_URL})
 
 ## 🔧 Generated Patch
-\`\`\`diff
+\\\`\\\`\\\`diff
 ${PATCH_CONTENT}
-\`\`\`
+\\\`\\\`\\\`
 
 ## 📝 Next Steps
 1. **Review** the Pull Request: [${PR_TITLE}](${PR_URL})
@@ -159,20 +182,24 @@ ${PATCH_CONTENT}
             COMMENT_ID="${{ github.event.comment.id }}"
             gh api repos/${{ github.repository }}/issues/comments/$COMMENT_ID \
               --method PATCH \
-              --field body="⚠️ **Patch Check Failed!**
+              --field body="⚠️ **Patch Generated but Cannot Apply Cleanly**
 
 **Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
 **Model:** ${MODEL_NAME}
 **Execution Time:** ${EXECUTION_TIME}
 
-The generated patch did not pass the \`git apply --check\` step. This indicates potential conflicts or issues with the patch.
+The generated patch did not pass the \\\`git apply --check\\\` step. This may indicate conflicts or outdated file references. Please review and apply manually.
 
-## 🔧 Generated Patch (Problematic)
-\`\`\`diff
+## 🔧 Generated Patch (Manual Application Required)
+\\\`\\\`\\\`diff
 ${PATCH_CONTENT}
-\`\`\`
+\\\`\\\`\\\`
 
-Please review the patch and apply it manually if needed.
+## 📝 Manual Steps
+1. Copy the patch above
+2. Save it to a file (e.g., \\\`fix.patch\\\`)
+3. Try \\\`git apply fix.patch\\\` or apply changes manually
+4. Create a PR with the changes
 
 ---
 *⚠️ Analysis by SWE-Agent using ${MODEL_NAME}*"
