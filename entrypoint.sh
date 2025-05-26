@@ -419,10 +419,35 @@ Comment \`@swe-agent\` with a more targeted, specific request!
     else
         log "❌ SWE-Agent execution failed with exit code: $SWE_EXIT_CODE"
         
-        # Extract error information
+        # Show diagnostic information
+        log "🔍 Diagnostic Information:"
+        log "  - Model: $MODEL_NAME"
+        log "  - Repository: $REPO_DIR"
+        log "  - Problem statement: $PROBLEM_STATEMENT_FILE"
+        log "  - Output directory: $OUTPUT_DIR"
+        
+        # Extract error information and show first/last lines of log
         ERROR_INFO=""
+        LOG_PREVIEW=""
         if [ -f "$OUTPUT_DIR/swe_agent.log" ]; then
-            ERROR_INFO=$(tail -20 "$OUTPUT_DIR/swe_agent.log" 2>/dev/null | grep -E "(Error|Exception|Failed)" | head -3 || echo "Check logs for details")
+            LOG_SIZE=$(wc -l < "$OUTPUT_DIR/swe_agent.log")
+            log "  - Log file size: $LOG_SIZE lines"
+            
+            ERROR_INFO=$(tail -20 "$OUTPUT_DIR/swe_agent.log" 2>/dev/null | grep -E "(Error|Exception|Failed|Traceback)" | head -3 || echo "No specific errors found in log")
+            
+            # Show first 10 lines and last 10 lines of log for diagnosis
+            LOG_PREVIEW="**First 10 lines of log:**
+\`\`\`
+$(head -10 "$OUTPUT_DIR/swe_agent.log" 2>/dev/null || echo "Could not read log file")
+\`\`\`
+
+**Last 10 lines of log:**
+\`\`\`
+$(tail -10 "$OUTPUT_DIR/swe_agent.log" 2>/dev/null || echo "Could not read log file")
+\`\`\`"
+        else
+            log "  - No log file found at $OUTPUT_DIR/swe_agent.log"
+            ERROR_INFO="No log file was created - SWE-Agent failed immediately"
         fi
         
         FAILURE_MESSAGE="❌ **SWE-Agent Execution Failed**
@@ -434,14 +459,24 @@ Comment \`@swe-agent\` with a more targeted, specific request!
 ## 🚨 What Happened
 I encountered an error while trying to analyze and fix this issue.
 
+## 🔍 Diagnostic Information
+- **Model:** ${MODEL_NAME}
+- **Exit Code:** ${SWE_EXIT_CODE}
+- **Repository:** Successfully cloned
+- **Problem Statement:** Created successfully
+
+## 📋 Error Details
+${ERROR_INFO}
+
+${LOG_PREVIEW}
+
 ## 🔍 Possible Causes
 - **Issue complexity** - The problem might require human intervention
 - **API limits** - Rate limiting or model constraints from the AI provider
 - **Repository issues** - Access permissions or repository-specific limitations  
 - **Service problems** - Temporary issues with SWE-Agent or AI model services
 - **Configuration issues** - Problems with model setup or parameters
-
-$(if [ -n "$ERROR_INFO" ] && [ "$ERROR_INFO" != "Check logs for details" ]; then echo "## 📋 Error Details"; echo "\`\`\`"; echo "$ERROR_INFO"; echo "\`\`\`"; fi)
+- **Installation issues** - SWE-Agent may not be properly installed
 
 ## 🛠️ What You Can Try
 1. **Rephrase the request** - Provide more details or context about the issue
@@ -449,6 +484,7 @@ $(if [ -n "$ERROR_INFO" ] && [ "$ERROR_INFO" != "Check logs for details" ]; then
 3. **Try again later** - If this was a temporary API or service issue
 4. **Simplify the request** - Focus on one specific aspect of the problem
 5. **Use a different model** - Try switching between GPT-4o and Claude models
+6. **Contact maintainers** - If this error persists, please report it
 
 ## 🔄 Ready to Try Again?  
 Comment \`@swe-agent\` with additional context or a rephrased request!
