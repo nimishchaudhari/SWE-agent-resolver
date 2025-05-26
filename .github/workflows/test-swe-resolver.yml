@@ -38,6 +38,7 @@ jobs:
           model_name: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}
           trigger_phrase: '@swe-agent'
           timeout_minutes: 45
+          use_prebuilt_image: 'true'  # Use cached image for faster execution
 
   apply-patch:
     name: Apply Patch and Create PR

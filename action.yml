@@ -33,7 +33,7 @@ outputs:
 
 runs:
   using: 'docker'
-  image: 'Dockerfile'
+  image: 'ghcr.io/nimishchaudhari/swe-agent-resolver:latest'
 
 branding:
   icon: 'cpu'
