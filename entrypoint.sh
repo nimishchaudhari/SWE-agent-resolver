@@ -347,9 +347,13 @@ if [ $SWE_EXIT_CODE -eq 0 ]; then
 **Execution Time:** ${elapsed_minutes_str}
 
 ## 🔧 Generated Patch
-\`\`\`diff
+<details><summary>Diff</summary>
+
+```diff
 $PATCH_CONTENT
-\`\`\`
+```
+
+</details>
 
 ## 🔄 Processing...
 The patch is being processed and a Pull Request will be created shortly.
