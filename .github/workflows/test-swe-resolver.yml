@@ -1,4 +1,4 @@
-name: SWE-Agent Issue Resolver
+name: SWE-Agent Issue Resolver with Real-time Progress
 
 on:
   issue_comment:
@@ -12,15 +12,17 @@ jobs:
   resolve_issue:
     name: Resolve Issue with SWE-Agent
     runs-on: ubuntu-latest
+    timeout-minutes: 120  # GitHub Actions job timeout (2 hours max)
     if: |
       github.event.comment.user.login != 'github-actions[bot]' &&
       contains(github.event.comment.body, '@swe-agent')
     
     steps:
-      - name: Run SWE-Agent Resolver
+      - name: Run SWE-Agent Resolver with Progress Tracking
         uses: nimishchaudhari/SWE-agent-resolver@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           llm_api_key: ${{ secrets.OPENAI_API_KEY }}
           model_name: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}
-          timeout_minutes: 30
+          trigger_phrase: '@swe-agent'
+          timeout_minutes: 45  # Increased default for better success rate
