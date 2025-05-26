@@ -7,7 +7,6 @@ GITHUB_TOKEN="${INPUT_GITHUB_TOKEN}"
 TRIGGER_PHRASE="${INPUT_TRIGGER_PHRASE:-@swe-agent}"
 LLM_API_KEY="${INPUT_LLM_API_KEY}"
 MODEL_NAME="${INPUT_MODEL_NAME:-gpt-4o}"
-TIMEOUT_MINUTES="${INPUT_TIMEOUT_MINUTES:-30}"
 
 # GitHub API URL
 GITHUB_API_URL="${GITHUB_API_URL:-https://api.github.com}"
@@ -112,7 +111,6 @@ INITIAL_MESSAGE="🤖 **SWE-Agent is working on this issue...**
 
 **Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
 **Model:** ${MODEL_NAME}
-**Timeout:** ${TIMEOUT_MINUTES} minutes
 
 ## 📊 Progress Status
 ⏳ **Starting up...** - Initializing SWE-Agent environment
@@ -237,14 +235,8 @@ fi
 
 log "🤖 Running SWE-Agent with model: $MODEL_NAME"
 
-# Validate timeout (minimum 5 minutes for SWE-Agent to work effectively)
-if [ "$TIMEOUT_MINUTES" -lt 5 ]; then
-    log "⚠️ Timeout too short ($TIMEOUT_MINUTES min), setting to 5 minutes minimum"
-    TIMEOUT_MINUTES=5
-fi
-
 # Execute SWE-Agent with correct 1.0+ command format
-timeout "${TIMEOUT_MINUTES}m" python -m sweagent.cli.main run \
+python -m sweagent.cli.main run \
     --agent.model.name "$MODEL_NAME" \
     --agent.model.per_instance_cost_limit 2.0 \
     --env.repo.path "$REPO_DIR" \
@@ -407,21 +399,21 @@ else
     fi
     
     if [ $SWE_EXIT_CODE -eq 124 ]; then
-        log "⏰ SWE-Agent timed out after ${TIMEOUT_MINUTES} minutes"
+        log "⏰ SWE-Agent timed out"
         
-        TIMEOUT_MESSAGE="⏰ **SWE-Agent Timeout**
+        TIMEOUT_MESSAGE="⏰ **SWE-Agent Process Exceeded Expected Time**
 
 **Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}  
 **Model:** ${MODEL_NAME}
-**Result:** Timed out after ${TIMEOUT_MINUTES} minutes
+**Result:** Process took longer than expected.
 
 ## ⏱️ What Happened
-The analysis took longer than expected and was stopped to prevent resource exhaustion.
+The analysis took longer than the configured timeout and was stopped. This is a fallback, and ideally, the agent should manage its own execution time.
 
 ## 🔧 Possible Solutions
 - **Simplify the request** - Break down complex issues into smaller, specific parts
 - **Provide more details** - Help SWE-Agent focus on the core problem with specific examples
-- **Increase timeout** - For complex issues, consider requesting a longer timeout
+- **Check agent configuration** - The agent's internal timeouts or iteration limits might need adjustment for complex tasks.
 - **Try different approach** - Rephrase the issue description to be more specific
 
 ## 💡 Tips for Better Results
@@ -434,7 +426,7 @@ The analysis took longer than expected and was stopped to prevent resource exhau
 Comment \`@swe-agent\` with a more focused request!
 
 ---
-*⏰ SWE-Agent using $MODEL_NAME (timeout: ${TIMEOUT_MINUTES}m)*"
+*⏰ SWE-Agent using $MODEL_NAME*"
         
         # Update progress comment with timeout message
         if [ -n "$PROGRESS_COMMENT_ID" ]; then
