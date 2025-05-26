@@ -243,7 +243,7 @@ python -m sweagent.cli.main run \
     --problem_statement.path "$PROBLEM_STATEMENT_FILE" \
     --output_dir "$OUTPUT_DIR" \
     --config /app/swe-agent/config/default.yaml \
-    > "$OUTPUT_DIR/swe_agent.log" 2>&1
+    2>&1 | tee "$OUTPUT_DIR/swe_agent.log"
 
 SWE_EXIT_CODE=$?
 
