@@ -165,6 +165,76 @@ $COMMENT_BODY
 Please analyze and fix this issue in the repository.
 EOF
 
+# --- Diagnostic Checks ---
+log "🔍 Checking for sweagent command..."
+SWEAGENT_PATH=$(command -v sweagent)
+if [ -z "$SWEAGENT_PATH" ] || ! command -v sweagent > /dev/null 2>&1; then
+    log "❌ Critical Error: sweagent command not found in PATH."
+    ERROR_MESSAGE="❌ Critical Error: \`sweagent\` command not found. Please check the Docker image setup or SWE-Agent installation."
+    if [ -n "$PROGRESS_COMMENT_ID" ]; then
+        update_comment "$PROGRESS_COMMENT_ID" "$ERROR_MESSAGE"
+    else
+        post_comment "$ERROR_MESSAGE"
+    fi
+    add_reaction "confused"
+    exit 1
+else
+    log "✅ sweagent command found at: $SWEAGENT_PATH"
+fi
+
+if [ -r "/app/swe-agent/config/default.yaml" ]; then
+    log "📄 Config file /app/swe-agent/config/default.yaml found and readable."
+else
+    log "⚠️ Config file /app/swe-agent/config/default.yaml not found or not readable."
+fi
+
+log "🩺 Attempting 'sweagent -h'..."
+SWEAGENT_HELP_OUTPUT_FILE="$TEMP_DIR/sweagent_help_output.log"
+if sweagent -h > "$SWEAGENT_HELP_OUTPUT_FILE" 2>&1; then
+    log "✅ 'sweagent -h' succeeded."
+    if [ -s "$SWEAGENT_HELP_OUTPUT_FILE" ]; then
+        log "📋 Help command output (first 15 lines):"
+        head -n 15 "$SWEAGENT_HELP_OUTPUT_FILE" | while IFS= read -r line; do log "  $line"; done
+    else
+        # This case should ideally not happen for a successful -h command
+        log "ℹ️ 'sweagent -h' produced no output, but exited successfully."
+    fi
+else
+    HELP_EXIT_CODE=$?
+    log "❌ 'sweagent -h' failed with exit code $HELP_EXIT_CODE."
+    HELP_OUTPUT_ON_FAILURE=""
+    GITHUB_COMMENT_BODY_PREFIX="❌ **Critical Error:** \`sweagent -h\` failed with exit code ${HELP_EXIT_CODE}. SWE-Agent may not be installed correctly or the help command is malfunctioning."
+    
+    if [ -s "$SWEAGENT_HELP_OUTPUT_FILE" ]; then
+        log "📋 Help command output on failure:"
+        cat "$SWEAGENT_HELP_OUTPUT_FILE" | while IFS= read -r line; do log "  $line"; done
+        HELP_OUTPUT_ON_FAILURE=$(cat "$SWEAGENT_HELP_OUTPUT_FILE")
+        GITHUB_COMMENT_BODY_SUFFIX="<details><summary>Command Output</summary>
+
+\`\`\`
+${HELP_OUTPUT_ON_FAILURE}
+\`\`\`
+
+</details>"
+        ERROR_MESSAGE="${GITHUB_COMMENT_BODY_PREFIX}
+
+${GITHUB_COMMENT_BODY_SUFFIX}"
+    else
+        log "⚠️ 'sweagent -h' failed with no output."
+        HELP_OUTPUT_ON_FAILURE="No output captured."
+        ERROR_MESSAGE="${GITHUB_COMMENT_BODY_PREFIX} No output was captured."
+    fi
+    
+    if [ -n "$PROGRESS_COMMENT_ID" ]; then
+        update_comment "$PROGRESS_COMMENT_ID" "$ERROR_MESSAGE"
+    else
+        post_comment "$ERROR_MESSAGE"
+    fi
+    add_reaction "confused"
+    exit 1
+fi
+# --- End Diagnostic Checks ---
+
 log "🤖 Running SWE-Agent with model: $MODEL_NAME"
 
 # Validate timeout (minimum 5 minutes for SWE-Agent to work effectively)
@@ -174,7 +244,7 @@ if [ "$TIMEOUT_MINUTES" -lt 5 ]; then
 fi
 
 # Execute SWE-Agent with correct 1.0+ command format
-timeout "${TIMEOUT_MINUTES}m" sweagent run \
+timeout "${TIMEOUT_MINUTES}m" python -m sweagent.cli.main run \
     --agent.model.name "$MODEL_NAME" \
     --agent.model.per_instance_cost_limit 2.0 \
     --env.repo.path "$REPO_DIR" \
