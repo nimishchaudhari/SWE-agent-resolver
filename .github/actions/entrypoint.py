@@ -104,7 +104,7 @@ class SWEAgentGitHubWrapper:
             if self.command == 'analyze':
                 return {
                     'success': True,
-                    'model_name': os.environ.get('SWE_AGENT_MODEL', 'gpt-4'),
+                    'model_name': os.environ.get('SWE_AGENT_MODEL', 'gpt-4o'),
                     'total_cost': 0.05,
                     'analysis': f"Analysis of the issue:\n\n{problem_statement[:200]}...\n\nThe issue appears to be related to [specific technical details would go here]."
                 }
@@ -112,7 +112,7 @@ class SWEAgentGitHubWrapper:
                 # Simulate a simple fix
                 return {
                     'success': True,
-                    'model_name': os.environ.get('SWE_AGENT_MODEL', 'gpt-4'),
+                    'model_name': os.environ.get('SWE_AGENT_MODEL', 'gpt-4o'),
                     'total_cost': 0.10,
                     'patch': """--- a/example.py
 +++ b/example.py
