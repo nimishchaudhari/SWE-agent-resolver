@@ -1,0 +1,75 @@
+name: SWE-Agent Resolver
+on:
+  issue_comment:
+    types: [created]
+  pull_request_comment:
+    types: [created]
+  commit_comment:
+    types: [created]
+  issues:
+    types: [opened, edited]
+  pull_request:
+    types: [opened, edited]
+
+jobs:
+  check-mention:
+    runs-on: ubuntu-latest
+    outputs:
+      should-run: ${{ steps.check.outputs.triggered }}
+      context-type: ${{ steps.check.outputs.context }}
+      command: ${{ steps.check.outputs.command }}
+    steps:
+      - id: check
+        run: |
+          BODY="${{ github.event.comment.body || github.event.issue.body || github.event.pull_request.body }}"
+          if [[ "$BODY" =~ @swe-agent-bot ]]; then
+            echo "triggered=true" >> $GITHUB_OUTPUT
+            echo "context=${{ github.event_name }}" >> $GITHUB_OUTPUT
+            
+            # Extract command
+            if [[ "$BODY" =~ @swe-agent-bot[[:space:]]+([a-zA-Z]+) ]]; then
+              echo "command=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+            else
+              echo "command=fix" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  run-swe-agent:
+    needs: check-mention
+    if: needs.check-mention.outputs.should-run == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install PyGithub gitpython
+          pip install git+https://github.com/SWE-agent/SWE-agent.git
+      
+      - name: Run SWE-agent wrapper
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SWE_AGENT_MODEL: ${{ vars.SWE_AGENT_MODEL || 'gpt-4' }}
+          SWE_AGENT_COST_LIMIT: ${{ vars.SWE_AGENT_COST_LIMIT || '2.0' }}
+        run: |
+          python .github/scripts/swe_agent_wrapper.py \
+            --context "${{ needs.check-mention.outputs.context-type }}" \
+            --issue-number "${{ github.event.issue.number || github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" \
+            --command "${{ needs.check-mention.outputs.command }}" \
+            --pr-head-ref "${{ github.event.pull_request.head.ref || '' }}" \
+            --pr-base-ref "${{ github.event.pull_request.base.ref || '' }}"
