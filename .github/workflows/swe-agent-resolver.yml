@@ -68,8 +68,17 @@ jobs:
       
       - name: Install dependencies
         run: |
-          pip install PyGithub gitpython
-          pip install git+https://github.com/SWE-agent/SWE-agent.git
+          # Install base dependencies
+          pip install PyGithub gitpython docker pyyaml
+          
+          # Clone and install SWE-agent properly
+          git clone https://github.com/SWE-agent/SWE-agent.git /tmp/swe-agent
+          cd /tmp/swe-agent
+          pip install -e .
+          
+          # Copy config files to expected location
+          mkdir -p $HOME/.swe-agent
+          cp -r config $HOME/.swe-agent/
       
       - name: Get PR details if applicable
         id: pr-details
@@ -99,6 +108,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SWE_AGENT_MODEL: ${{ vars.SWE_AGENT_MODEL || 'gpt-4' }}
           SWE_AGENT_COST_LIMIT: ${{ vars.SWE_AGENT_COST_LIMIT || '2.0' }}
+          SWE_AGENT_CONFIG_DIR: /tmp/swe-agent/config
         run: |
           python .github/scripts/swe_agent_wrapper.py \
             --context "${{ needs.check-mention.outputs.context-type }}" \
