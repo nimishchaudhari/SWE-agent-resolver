@@ -13,7 +13,22 @@ inputs:
     default: '@swe-agent'
   llm_api_key:
     description: 'API key for the LLM (OpenAI, Anthropic, etc.). Store as repository secret.'
-    required: true
+    required: false
+  openai_api_key:
+    description: 'OpenAI API key. Store as repository secret.'
+    required: false
+  anthropic_api_key:
+    description: 'Anthropic API key. Store as repository secret.'
+    required: false
+  deepseek_api_key:
+    description: 'DeepSeek API key. Store as repository secret.'
+    required: false
+  openrouter_api_key:
+    description: 'OpenRouter API key. Store as repository secret.'
+    required: false
+  gemini_api_key:
+    description: 'Google Gemini API key. Store as repository secret.'
+    required: false
   model_name:
     description: 'AI model to use (e.g., gpt-4o, claude-3.5-sonnet, gpt-4-turbo)'
     required: false

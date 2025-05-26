@@ -34,8 +34,15 @@ jobs:
         uses: nimishchaudhari/swe-agent-resolver@main  # Replace with your-username/swe-agent-resolver@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          llm_api_key: ${{ secrets.OPENAI_API_KEY }}  # Set this as a repository secret
-          model_name: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}  # Optionally set SWE_AGENT_MODEL as a repository variable
+          # API Keys - provide at least one (store as repository secrets)
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}          # For GPT models
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}    # For Claude models
+          deepseek_api_key: ${{ secrets.DEEPSEEK_API_KEY }}      # For DeepSeek models
+          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}  # For OpenRouter models
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}          # For Gemini models
+          # Legacy fallback (will be used if specific API key is not provided)
+          llm_api_key: ${{ secrets.OPENAI_API_KEY }}             # Fallback to OpenAI
+          model_name: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}   # Optionally set SWE_AGENT_MODEL as a repository variable
           trigger_phrase: '@swe-agent'
           timeout_minutes: 45
 

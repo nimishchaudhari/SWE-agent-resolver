@@ -7,6 +7,11 @@ set -o pipefail
 GITHUB_TOKEN="${INPUT_GITHUB_TOKEN}"
 TRIGGER_PHRASE="${INPUT_TRIGGER_PHRASE:-@swe-agent}"
 LLM_API_KEY="${INPUT_LLM_API_KEY}"
+OPENAI_API_KEY="${INPUT_OPENAI_API_KEY}"
+ANTHROPIC_API_KEY="${INPUT_ANTHROPIC_API_KEY}"
+DEEPSEEK_API_KEY="${INPUT_DEEPSEEK_API_KEY}"
+OPENROUTER_API_KEY="${INPUT_OPENROUTER_API_KEY}"
+GEMINI_API_KEY="${INPUT_GEMINI_API_KEY}"
 MODEL_NAME="${INPUT_MODEL_NAME:-gpt-4o}"
 
 # GitHub API URL
@@ -126,8 +131,45 @@ if [ -z "$PROGRESS_COMMENT_ID" ]; then
 fi
 
 # Set up API keys for SWE-Agent
-export OPENAI_API_KEY="$LLM_API_KEY"
-export ANTHROPIC_API_KEY="$LLM_API_KEY"
+# Support multiple API providers - LiteLLM will handle the routing based on model prefix
+if [ -n "$OPENAI_API_KEY" ]; then
+    export OPENAI_API_KEY="$OPENAI_API_KEY"
+    log "✅ OpenAI API key configured"
+elif [ -n "$LLM_API_KEY" ]; then
+    export OPENAI_API_KEY="$LLM_API_KEY"
+    log "✅ OpenAI API key configured (fallback from LLM_API_KEY)"
+fi
+
+if [ -n "$ANTHROPIC_API_KEY" ]; then
+    export ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
+    log "✅ Anthropic API key configured"
+elif [ -n "$LLM_API_KEY" ]; then
+    export ANTHROPIC_API_KEY="$LLM_API_KEY"
+    log "✅ Anthropic API key configured (fallback from LLM_API_KEY)"
+fi
+
+if [ -n "$DEEPSEEK_API_KEY" ]; then
+    export DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY"
+    log "✅ DeepSeek API key configured"
+fi
+
+if [ -n "$OPENROUTER_API_KEY" ]; then
+    export OPENROUTER_API_KEY="$OPENROUTER_API_KEY"
+    log "✅ OpenRouter API key configured"
+fi
+
+if [ -n "$GEMINI_API_KEY" ]; then
+    export GEMINI_API_KEY="$GEMINI_API_KEY"
+    log "✅ Gemini API key configured"
+fi
+
+# Validate that at least one API key is configured
+if [ -z "$OPENAI_API_KEY" ] && [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$DEEPSEEK_API_KEY" ] && [ -z "$OPENROUTER_API_KEY" ] && [ -z "$GEMINI_API_KEY" ]; then
+    log "❌ No API keys configured. Please provide at least one of: OPENAI_API_KEY, ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY, GEMINI_API_KEY"
+    post_comment "❌ **Configuration Error**: No API keys configured. Please add at least one API key as a repository secret."
+    add_reaction "confused"
+    exit 1
+fi
 
 # Create temporary directories
 TEMP_DIR="/tmp/swe_agent_$(date +%s)"

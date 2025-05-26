@@ -31,9 +31,16 @@ jobs:
       
       - name: Run SWE-Agent
         id: swe-agent
-        uses: nimishchaudhari/SWE-agent-resolver@main
+        uses: nimishchaudhari/swe-agent-resolver@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # API Keys - provide at least one (store as repository secrets)
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          deepseek_api_key: ${{ secrets.DEEPSEEK_API_KEY }}
+          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          # Legacy fallback
           llm_api_key: ${{ secrets.OPENAI_API_KEY }}
           model_name: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}
           trigger_phrase: '@swe-agent'
