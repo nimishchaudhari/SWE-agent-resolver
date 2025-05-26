@@ -102,7 +102,7 @@ echo "Repository cloned."
 echo "Preparing to run SWE-agent..."
 
 SWE_AGENT_COMMAND=(
-    "python" "-m" "sweagent.run.run" "run"
+    "python" "-m" "sweagent.run.run"
     "--agent.model.name" "${INPUT_MODEL_NAME}"
     "--problem_statement.path" "${PROBLEM_FILE_PATH}"  # Corrected from .file_path to .path
     "--env.repo.path" "${TARGET_REPO_CLONE_PATH}"
