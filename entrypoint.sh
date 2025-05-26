@@ -451,6 +451,149 @@ $PATCH_CONTENT
                 log "❌ Failed to apply patch. Please check the patch content and repository state."
                 # Attempt to clean up the failed apply
                 git apply --reject "$PATCH_FILE_TEMP" > /dev/null 2>&1 || true # Try to get .rej files
+                git reset --hard HEAD > /dev/null 2>&1 # Reset any partial application
+                rm "$PATCH_FILE_TEMP"
+                FINAL_MESSAGE="⚠️ **Patch Application Failed!**
+
+**Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
+**Model:** ${MODEL_NAME}
+**Execution Time:** ${elapsed_minutes_str}
+
+The generated patch could not be applied to the repository. This might be due to conflicts or an invalid patch format.
+
+## 🔧 Generated Patch (Problematic)
+\`\`\`diff
+$PATCH_CONTENT
+\`\`\`
+
+Please review the patch and the repository state.
+
+---
+*⚠️ Analysis by SWE-Agent using $MODEL_NAME*"
+            fi
+        else
+            log "❌ Patch check failed. The patch may not apply cleanly."
+            rm "$PATCH_FILE_TEMP"
+            FINAL_MESSAGE="⚠️ **Patch Check Failed!**
+
+**Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
+**Model:** ${MODEL_NAME}
+**Execution Time:** ${elapsed_minutes_str}
+
+The generated patch did not pass the \`git apply --check\` step. This indicates potential conflicts or issues with the patch.
+
+## 🔧 Generated Patch (Problematic)
+\`\`\`diff
+$PATCH_CONTENT
+\`\`\`
+
+Please review the patch. It might not apply cleanly.
+
+---
+*⚠️ Analysis by SWE-Agent using $MODEL_NAME*"
+        fi
+        
+        # Return to the original temporary directory before cleaning up
+        cd "$TEMP_DIR"
+        # --- End Apply patch ---
+        
+        # Update the progress comment with final results
+        if [ -n "$PROGRESS_COMMENT_ID" ]; then
+            update_comment "$PROGRESS_COMMENT_ID" "$FINAL_MESSAGE"
+        else
+            post_comment "$FINAL_MESSAGE"
+        fi
+        
+        add_reaction "thumbsup"
+        
+    else
+        log "⚠️ No patch found in SWE-Agent output"
+        
+        FINAL_MESSAGE="✅ **SWE-Agent Analysis Complete**
+
+**Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
+**Model:** ${MODEL_NAME}
+**Result:** Analysis completed but no patch generated
+**Execution Time:** ${elapsed_minutes_str}
+
+## 🔍 Analysis Results
+I've analyzed the issue but didn't generate a code patch. This might mean:
+
+- 📋 **Investigation needed** - The issue requires manual investigation
+- ℹ️ **More information needed** - Additional details would help provide a solution
+- ✅ **Already resolved** - The problem may already be fixed
+- 📝 **Documentation issue** - The issue might be related to documentation rather than code
+- 🔧 **Complex solution required** - The fix might require architectural changes
+
+## 💡 What You Can Do
+1. **Provide more details** about the issue
+2. **Add specific examples** of the problem
+3. **Include error messages** or logs if available
+4. **Specify expected behavior** vs actual behavior
+5. **Try rephrasing** the request with more specific requirements
+
+Feel free to comment with additional information and trigger the agent again!
+
+---
+*🤖 Analysis by SWE-Agent using $MODEL_NAME*"
+        
+        # Update the progress comment with final results
+        if [ -n "$PROGRESS_COMMENT_ID" ]; then
+            update_comment "$PROGRESS_COMMENT_ID" "$FINAL_MESSAGE"
+        else
+            post_comment "$FINAL_MESSAGE"
+        fi
+        
+        add_reaction "thinking_face"
+    fi
+    
+else
+    # SWE-Agent failed - determine the cause and update progress comment
+    start_time_file="$TEMP_DIR/start_time"
+    run_duration_str="N/A"
+    if [ -f "$start_time_file" ]; then
+        start_time_s=$(cat "$start_time_file")
+        current_time_s=$(date +%s)
+        if [[ "$start_time_s" =~ ^[0-9]+$ ]] && [[ "$current_time_s" =~ ^[0-9]+$ ]] && [ "$start_time_s" -le "$current_time_s" ]; then
+            run_seconds=$((current_time_s - start_time_s))
+            elapsed_minutes_val=$((run_seconds / 60))
+            if [ "$elapsed_minutes_val" -gt 0 ]; then
+                run_duration_str="${elapsed_minutes_val} minutes"
+            elif [ "$run_seconds" -gt 0 ]; then
+                run_duration_str="${run_seconds} seconds"
+            else
+                run_duration_str="< 1 second"
+            fi
+        fi
+    fi
+    
+    if [ $SWE_EXIT_CODE -eq 124 ]; then
+        log "⏰ SWE-Agent timed out"
+        
+        TIMEOUT_MESSAGE="⏰ **SWE-Agent Process Exceeded Expected Time**
+
+**Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}  
+**Model:** ${MODEL_NAME}
+**Result:** Process took longer than expected (actual runtime: ${run_duration_str}).
+
+## ⏱️ What Happened
+The analysis took longer than the configured timeout and was stopped. This is a fallback, and ideally, the agent should manage its own execution time.
+
+## 🔧 Possible Solutions
+- **Simplify the request** - Break down complex issues into smaller, specific parts
+- **Provide more details** - Help SWE-Agent focus on the core problem with specific examples
+- **Check agent configuration** - The agent's internal timeouts or iteration limits might need adjustment for complex tasks.
+- **Try different approach** - Rephrase the issue description to be more specific
+
+## 💡 Tips for Better Results
+1. **Be specific** - \"Fix login bug on line 45\" vs \"Fix login issues\"
+2. **Include context** - Provide error messages, expected vs actual behavior
+3. **One issue at a time** - Don't mix multiple problems in one request
+4. **Add examples** - Show input/output or steps to reproduce
+
+## 🔄 Ready to Try Again?
+Comment \`@swe-agent\` with a more focused request!
+
 ---
 *⏰ SWE-Agent using $MODEL_NAME (runtime: ${run_duration_str})*"
         
@@ -524,14 +667,16 @@ Comment \`@swe-agent\` with a more targeted, specific request!
             ERROR_INFO=$(tail -20 "$OUTPUT_DIR/swe_agent.log" 2>/dev/null | grep -E "(Error|Exception|Failed|Traceback)" | head -3 || echo "No specific errors found in log")
             
             # Show first 10 lines and last 10 lines of log for diagnosis
+            LOG_FIRST_LINES=$(head -10 "$OUTPUT_DIR/swe_agent.log" 2>/dev/null || echo "Could not read log file")
+            LOG_LAST_LINES=$(tail -10 "$OUTPUT_DIR/swe_agent.log" 2>/dev/null || echo "Could not read log file")
             LOG_PREVIEW="**First 10 lines of log:**
 \`\`\`
-$(head -10 "$OUTPUT_DIR/swe_agent.log" 2>/dev/null || echo "Could not read log file")
+${LOG_FIRST_LINES}
 \`\`\`
 
 **Last 10 lines of log:**
 \`\`\`
-$(tail -10 "$OUTPUT_DIR/swe_agent.log" 2>/dev/null || echo "Could not read log file")
+${LOG_LAST_LINES}
 \`\`\`"
         else
             log "  - No log file found at $OUTPUT_DIR/swe_agent.log"
