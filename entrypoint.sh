@@ -140,7 +140,7 @@ echo "$(date +%s)" > "$TEMP_DIR/start_time"
 
 # Clone repository
 log "📥 Cloning repository..."
-if ! git clone "$REPO_URL" "$REPO_DIR"; then
+if ! git clone --depth 1 "$REPO_URL" "$REPO_DIR"; then
     log "❌ Failed to clone repository"
     post_comment "❌ Failed to clone repository. Please check permissions."
     add_reaction "confused"
@@ -228,10 +228,34 @@ ${GITHUB_COMMENT_BODY_SUFFIX}"
     
     if [ -n "$PROGRESS_COMMENT_ID" ]; then
         update_comment "$PROGRESS_COMMENT_ID" "$ERROR_MESSAGE"
+if [ "$DEBUG_MODE" == "1" ]; then
+    log "⚡ Debug mode enabled - skipping sweagent run"
+    echo "Simulated sweagent run in debug mode" > "$OUTPUT_DIR/swe_agent.log"
+    SWE_EXIT_CODE=0
+else
     else
         post_comment "$ERROR_MESSAGE"
     fi
     add_reaction "confused"
+if [ "$DEBUG_MODE" == "1" ]; then
+    log "⚡ Debug mode enabled - skipping sweagent run"
+    echo "Simulated sweagent run in debug mode" > "$OUTPUT_DIR/swe_agent.log"
+    SWE_EXIT_CODE=0
+else
+    sweagent run \
+        --agent.model.name "$MODEL_NAME" \
+        --agent.model.per_instance_cost_limit 2.0 \
+        --env.repo.path "$REPO_DIR" \
+        --env.deployment.type "local" \
+        --problem_statement.path "$PROBLEM_STATEMENT_FILE" \
+        --output_dir "$OUTPUT_DIR" \
+        --config /app/swe-agent/config/default.yaml \
+        --actions.apply_patch_locally false \
+        2>&1 | tee "$OUTPUT_DIR/swe_agent.log"
+
+    SWE_EXIT_CODE=${PIPESTATUS[0]}
+fi
+
     exit 1
 fi
 # --- End Diagnostic Checks ---
