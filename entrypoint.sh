@@ -123,10 +123,14 @@ echo "Executing SWE-agent command: ${SWE_AGENT_COMMAND[*]}"
 
 SWE_AGENT_LOG_FILE="${TEMP_DIR}/swe_agent_run.log"
 AGENT_EXIT_CODE=0
-"${SWE_AGENT_COMMAND[@]}" > "$SWE_AGENT_LOG_FILE" 2>&1 || AGENT_EXIT_CODE=$?
+# Execute the command, tee its output to the log file and stdout/stderr, then capture exit status
+# shellcheck disable=SC2260 # We do want to expand SWE_AGENT_COMMAND here
+eval "${SWE_AGENT_COMMAND[*]}" 2>&1 | tee "$SWE_AGENT_LOG_FILE"; AGENT_EXIT_CODE=${PIPESTATUS[0]}
 
 echo "SWE-agent execution finished with exit code: ${AGENT_EXIT_CODE}."
-echo "--- SWE-agent Log ---"
+# The log is now streamed, but we can keep this for a final full log record if desired,
+# or remove the cat block if the streamed output is sufficient.
+echo "--- SWE-agent Log (also streamed during execution) ---"
 cat "$SWE_AGENT_LOG_FILE"
 echo "--- End of SWE-agent Log ---"
 
