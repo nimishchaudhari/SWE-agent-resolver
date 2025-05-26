@@ -236,9 +236,33 @@ ${GITHUB_COMMENT_BODY_SUFFIX}"
 fi
 # --- End Diagnostic Checks ---
 
+# Function to update comment with retry logic
+update_comment_with_retry() {
+    local comment_id="$1"
+    local message="$2"
+    local max_retries=3
+    local retry_delay=2
+    local attempt=1
+
+    while [ $attempt -le $max_retries ]; do
+        if update_comment "$comment_id" "$message"; then
+            return 0
+        else
+            log "⚠️ Failed to update comment on GitHub, retrying in $retry_delay seconds... (Attempt $attempt/$max_retries)"
+            sleep $retry_delay
+            attempt=$((attempt + 1))
+        fi
+    done
+    return 1
+}
+
 log "🤖 Running SWE-Agent with model: $MODEL_NAME"
 
-# Execute SWE-Agent with correct 1.0+ command format
+PROGRESS_UPDATE_INTERVAL=10  # seconds
+LAST_UPDATE_TIME=0
+OUTPUT_BUFFER=""
+MAX_COMMENT_SIZE=60000  # Leave some margin for JSON and other content
+
 sweagent run \
     --agent.model.name "$MODEL_NAME" \
     --agent.model.per_instance_cost_limit 2.0 \
@@ -248,7 +272,26 @@ sweagent run \
     --output_dir "$OUTPUT_DIR" \
     --config /app/swe-agent/config/default.yaml \
     --actions.apply_patch_locally false \
-    2>&1 | tee "$OUTPUT_DIR/swe_agent.log"
+    2>&1 | while IFS= read -r line; do
+        echo "$line" | tee -a "$OUTPUT_DIR/swe_agent.log"
+        OUTPUT_BUFFER+="$line\n"
+        CURRENT_TIME=$(date +%s)
+        TIME_DIFF=$((CURRENT_TIME - LAST_UPDATE_TIME))
+
+        if [ $TIME_DIFF -ge $PROGRESS_UPDATE_INTERVAL ]; then
+            # Truncate output buffer if too large
+            if [ ${#OUTPUT_BUFFER} -gt $MAX_COMMENT_SIZE ]; then
+                OUTPUT_BUFFER="${OUTPUT_BUFFER: -$MAX_COMMENT_SIZE}"
+                OUTPUT_BUFFER="...\n${OUTPUT_BUFFER}"
+            fi
+
+            if [ -n "$PROGRESS_COMMENT_ID" ]; then
+                update_comment_with_retry "$PROGRESS_COMMENT_ID" "🤖 **SWE-Agent is working...**\n\n$OUTPUT_BUFFER"
+            fi
+            LAST_UPDATE_TIME=$CURRENT_TIME
+            OUTPUT_BUFFER=""
+        fi
+    done
 
 SWE_EXIT_CODE=${PIPESTATUS[0]}
 

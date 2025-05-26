@@ -1,0 +1,14 @@
+{
+  "comment": {
+    "body": "@swe-agent please fix this",
+    "id": 123456
+  },
+  "issue": {
+    "number": 1,
+    "title": "Test Issue",
+    "body": "This is a test issue body."
+  },
+  "repository": {
+    "clone_url": "https://github.com/owner/repo.git"
+  }
+}
