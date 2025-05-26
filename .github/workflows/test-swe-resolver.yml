@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Run SWE-Agent Resolver Action
         # Use your actual action repo and tag or branch
-        uses: nimishchaudhari/swe-agent-resolver-action@main
+        uses: nimishchaudhari/SWE-agent-resolver@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           llm_api_key: ${{ secrets.OPENAI_API_KEY }}
