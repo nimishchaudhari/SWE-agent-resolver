@@ -1,24 +1,33 @@
-FROM python:3.11
+# Start from a Python base image (e.g., Python 3.10 or 3.11, check SWE-agent compatibility)
+FROM python:3.10-slim
 
-# Set the working directory
+# Install git, jq (for parsing GitHub event JSON), curl (for GitHub API calls if needed directly)
+# and other common utilities that might be useful.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    jq \
+    curl \
+    patch \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
 WORKDIR /app
 
-# Install nodejs
-RUN apt update && \
-    apt install -y nodejs npm && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# Clone the SWE-agent repository. Consider pinning to a specific commit/tag for stability in production.
+# For development, cloning main/master is fine.
+RUN git clone https://github.com/SWE-agent/SWE-agent.git ./swe-agent
+# If SWE-agent uses submodules:
+# RUN cd swe-agent && git submodule update --init --recursive
 
-# Install Docker CLI using the official Docker installation script
-RUN curl -fsSL https://get.docker.com -o get-docker.sh && \
-    sh get-docker.sh
+# Install SWE-agent dependencies.
+# Ensure requirements.txt is at the root of SWE-agent or adjust path.
+# Some agents require specific versions of torch, etc. This might need adjustment
+# if the base python image doesn't play well with specific deep learning library versions.
+RUN pip install --no-cache-dir -r swe-agent/requirements.txt
 
-# Copy the application code
-# Do this last to take advantage of the docker layer mechanism
-COPY . /app
+# Copy the entrypoint script into the container and make it executable
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
-# Install Python dependencies
-RUN pip install -e '.'
-
-# Install react dependencies ahead of time
-RUN cd sweagent/frontend && npm install
+# Set the entrypoint
+ENTRYPOINT ["/app/entrypoint.sh"]
