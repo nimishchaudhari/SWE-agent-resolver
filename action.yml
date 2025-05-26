@@ -17,7 +17,7 @@ inputs:
   model_name:
     description: 'The model name to be used by SWE-agent (e.g., gpt-4-turbo, claude-3-opus-20240229).'
     required: false
-    default: 'gpt-4-turbo' # A sensible default
+    default: 'gpt-4o' # A sensible default
   swe_agent_args:
     description: 'Optional additional arguments to pass directly to the SWE-agent run.py script.'
     required: false
