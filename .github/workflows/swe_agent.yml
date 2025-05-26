@@ -12,13 +12,13 @@ jobs:
   swe_agent:
     if: |
       (github.event_name == 'issue_comment' &&
-       contains(github.event.comment.body, env.TRIGGER_PHRASE)) ||
+       contains(github.event.comment.body, '@swe-agent')) ||
       (github.event_name == 'pull_request_review_comment' &&
-       contains(github.event.comment.body, env.TRIGGER_PHRASE)) ||
+       contains(github.event.comment.body, '@swe-agent')) ||
       (github.event_name == 'pull_request_target' &&
-       contains(github.event.pull_request.body, env.TRIGGER_PHRASE)) ||
+       contains(github.event.pull_request.body || '', '@swe-agent')) ||
       (github.event_name == 'push' &&
-       contains(github.event.head_commit.message, env.TRIGGER_PHRASE))
+       contains(github.event.head_commit.message, '@swe-agent'))
     runs-on: ubuntu-latest
 
     permissions:            # least-privilege for autonomous code pushes
