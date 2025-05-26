@@ -241,7 +241,7 @@ log "🤖 Running SWE-Agent with model: $MODEL_NAME"
 # Prepare model-specific parameters
 MODEL_PARAMS=()
 if [[ "$MODEL_NAME" == "o1" || "$MODEL_NAME" == "o3" || "$MODEL_NAME" == "o3-mini" || "$MODEL_NAME" == "o4-mini" ]]; then
-    MODEL_PARAMS+=("--agent.model.top_p" "null")
+    MODEL_PARAMS+=("--agent.model.top_p" "null" "--agent.model.temperature" "1.0")
 fi
 
 # Execute SWE-Agent with correct 1.0+ command format
