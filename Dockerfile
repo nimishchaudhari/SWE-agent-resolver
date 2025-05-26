@@ -1,20 +1,23 @@
 FROM python:3.12-slim
 
-# Install required packages
+# Install required system packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     jq \
     curl \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Clone and install SWE-agent
-RUN git clone https://github.com/SWE-agent/SWE-agent.git ./swe-agent
+# Clone and install SWE-agent (latest version)
+RUN git clone --depth 1 https://github.com/SWE-agent/SWE-agent.git ./swe-agent
+
+# Install SWE-agent and dependencies
 RUN cd /app/swe-agent && \
     python -m pip install --upgrade pip && \
-    pip install --editable .
+    pip install --no-cache-dir --editable .
 
 # Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh

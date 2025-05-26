@@ -4,10 +4,13 @@ set -e
 
 # --- Configuration ---
 GITHUB_TOKEN="${INPUT_GITHUB_TOKEN}"
-TRIGGER_PHRASE="${INPUT_TRIGGER_PHRASE}"
+TRIGGER_PHRASE="${INPUT_TRIGGER_PHRASE:-@swe-agent}"
 LLM_API_KEY="${INPUT_LLM_API_KEY}"
-MODEL_NAME="${INPUT_MODEL_NAME}"
+MODEL_NAME="${INPUT_MODEL_NAME:-gpt-4o}"
 TIMEOUT_MINUTES="${INPUT_TIMEOUT_MINUTES:-30}"
+
+# GitHub API URL
+GITHUB_API_URL="${GITHUB_API_URL:-https://api.github.com}"
 
 # --- Utility Functions ---
 log() {
@@ -23,6 +26,10 @@ post_comment() {
         -H "Accept: application/vnd.github.v3+json" \
         "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" \
         -d "$json_payload" > /dev/null
+    
+    if [ $? -ne 0 ]; then
+        log "⚠️ Failed to post comment to GitHub"
+    fi
 }
 
 add_reaction() {
@@ -33,6 +40,10 @@ add_reaction() {
         -H "Accept: application/vnd.github.v3+json" \
         "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/comments/${COMMENT_ID}/reactions" \
         -d "{\"content\": \"$reaction\"}" > /dev/null
+    
+    if [ $? -ne 0 ]; then
+        log "⚠️ Failed to add reaction to GitHub comment"
+    fi
 }
 
 # --- Main Execution ---
@@ -50,7 +61,19 @@ COMMENT_BODY=$(jq -r '.comment.body' "$EVENT_PATH")
 COMMENT_ID=$(jq -r '.comment.id' "$EVENT_PATH")
 ISSUE_NUMBER=$(jq -r '.issue.number' "$EVENT_PATH")
 ISSUE_TITLE=$(jq -r '.issue.title' "$EVENT_PATH")
+ISSUE_BODY=$(jq -r '.issue.body // ""' "$EVENT_PATH")
 REPO_URL=$(jq -r '.repository.clone_url' "$EVENT_PATH")
+
+# Validate extracted data
+if [ -z "$COMMENT_BODY" ] || [ "$COMMENT_BODY" == "null" ]; then
+    log "❌ Could not extract comment body"
+    exit 1
+fi
+
+if [ -z "$ISSUE_NUMBER" ] || [ "$ISSUE_NUMBER" == "null" ]; then
+    log "❌ Could not extract issue number"
+    exit 1
+fi
 
 # Check if comment contains trigger phrase
 if [[ "$COMMENT_BODY" != *"$TRIGGER_PHRASE"* ]]; then
@@ -59,72 +82,118 @@ if [[ "$COMMENT_BODY" != *"$TRIGGER_PHRASE"* ]]; then
 fi
 
 log "✅ Trigger phrase found. Processing issue #$ISSUE_NUMBER"
+log "📋 Issue: $ISSUE_TITLE"
 
 # Add eyes reaction to show we're processing
 add_reaction "eyes"
 
+# Set up API keys for SWE-Agent
+export OPENAI_API_KEY="$LLM_API_KEY"
+export ANTHROPIC_API_KEY="$LLM_API_KEY"
+
+# Create temporary directories
+TEMP_DIR="/tmp/swe_agent_$(date +%s)"
+REPO_DIR="$TEMP_DIR/repo"
+OUTPUT_DIR="$TEMP_DIR/output"
+mkdir -p "$REPO_DIR" "$OUTPUT_DIR"
+
 # Clone repository
-REPO_DIR="/tmp/repo"
 log "📥 Cloning repository..."
 if ! git clone "$REPO_URL" "$REPO_DIR"; then
     log "❌ Failed to clone repository"
     post_comment "❌ Failed to clone repository. Please check permissions."
-    add_reaction "thumbsdown"
+    add_reaction "confused"
     exit 1
 fi
 
 cd "$REPO_DIR"
 
-# Run SWE-Agent
-log "🤖 Running SWE-Agent..."
-export OPENAI_API_KEY="$LLM_API_KEY"
-export ANTHROPIC_API_KEY="$LLM_API_KEY"
-
-SWE_OUTPUT_DIR="/tmp/swe_output"
-mkdir -p "$SWE_OUTPUT_DIR"
-
 # Create problem statement file
-PROBLEM_STATEMENT_FILE="$SWE_OUTPUT_DIR/problem_statement.md"
+PROBLEM_STATEMENT_FILE="$OUTPUT_DIR/problem_statement.md"
 cat > "$PROBLEM_STATEMENT_FILE" << EOF
 # Issue: $ISSUE_TITLE
 
 ## Problem Description
-$ISSUE_TITLE
+$ISSUE_BODY
+
+## User Request
+$COMMENT_BODY
 
 ## Task
 Please analyze and fix this issue in the repository.
 EOF
 
-# Use the new SWE-Agent v1.0+ command format
+log "🤖 Running SWE-Agent with model: $MODEL_NAME"
+
+# Validate timeout (minimum 5 minutes for SWE-Agent to work effectively)
+if [ "$TIMEOUT_MINUTES" -lt 5 ]; then
+    log "⚠️ Timeout too short ($TIMEOUT_MINUTES min), setting to 5 minutes minimum"
+    TIMEOUT_MINUTES=5
+fi
+
+# Execute SWE-Agent with correct 1.0+ command format
 timeout "${TIMEOUT_MINUTES}m" sweagent run \
-    --config /app/swe-agent/config/default.yaml \
     --agent.model.name "$MODEL_NAME" \
     --agent.model.per_instance_cost_limit 2.0 \
     --env.repo.path "$REPO_DIR" \
     --problem_statement.path "$PROBLEM_STATEMENT_FILE" \
-    --output_dir "$SWE_OUTPUT_DIR" > "$SWE_OUTPUT_DIR/output.log" 2>&1
+    --output_dir "$OUTPUT_DIR" \
+    --config /app/swe-agent/config/default.yaml \
+    > "$OUTPUT_DIR/swe_agent.log" 2>&1
 
-if [ $? -eq 0 ]; then
+SWE_EXIT_CODE=$?
+
+if [ $SWE_EXIT_CODE -eq 0 ]; then
     log "✅ SWE-Agent completed successfully"
     
-    # Look for generated patches
-    PATCH_FILE=$(find "$SWE_OUTPUT_DIR" -name "*.patch" | head -1)
-    if [ -z "$PATCH_FILE" ]; then
-        PATCH_FILE=$(find "$REPO_DIR" -name "*.patch" | head -1)
+    # Look for patches in SWE-Agent 1.0 output format
+    PATCH_FOUND=false
+    PATCH_CONTENT=""
+    
+    # Check for .patch files
+    for patch_file in $(find "$OUTPUT_DIR" -name "*.patch" 2>/dev/null || true); do
+        if [ -s "$patch_file" ]; then
+            PATCH_CONTENT=$(cat "$patch_file")
+            PATCH_FOUND=true
+            log "📄 Found patch file: $patch_file"
+            break
+        fi
+    done
+    
+    # Check for trajectory files with patches
+    if [ "$PATCH_FOUND" = false ]; then
+        for traj_file in $(find "$OUTPUT_DIR" -name "*.traj" 2>/dev/null || true); do
+            if [ -s "$traj_file" ]; then
+                # Extract patch from trajectory file if present
+                PATCH_CONTENT=$(grep -A 1000 "diff --git" "$traj_file" | head -n 500 || true)
+                if [ -n "$PATCH_CONTENT" ] && [[ "$PATCH_CONTENT" == *"diff --git"* ]]; then
+                    PATCH_FOUND=true
+                    log "📄 Found patch in trajectory file: $traj_file"
+                    break
+                fi
+            fi
+        done
     fi
     
-    if [ -n "$PATCH_FILE" ] && [ -f "$PATCH_FILE" ]; then
-        log "📄 Found patch file: $PATCH_FILE"
-        PATCH_CONTENT=$(cat "$PATCH_FILE")
-        
-        # Truncate if too long
-        if [ ${#PATCH_CONTENT} -gt 10000 ]; then
-            PATCH_CONTENT="${PATCH_CONTENT:0:10000}
+    # Check for any diff output in logs
+    if [ "$PATCH_FOUND" = false ]; then
+        PATCH_CONTENT=$(grep -A 100 "diff --git" "$OUTPUT_DIR/swe_agent.log" 2>/dev/null || true)
+        if [ -n "$PATCH_CONTENT" ] && [[ "$PATCH_CONTENT" == *"diff --git"* ]]; then
+            PATCH_FOUND=true
+            log "📄 Found patch in SWE-Agent logs"
+        fi
+    fi
+    
+    # Generate response based on results
+    if [ "$PATCH_FOUND" = true ] && [ -n "$PATCH_CONTENT" ]; then
+        # Truncate patch if too long (GitHub comment limit)
+        if [ ${#PATCH_CONTENT} -gt 50000 ]; then
+            PATCH_CONTENT="${PATCH_CONTENT:0:50000}
 ...
 (Patch truncated - too long for comment)"
         fi
         
-        MESSAGE="✅ **Solution Generated Successfully!**
+        SUCCESS_MESSAGE="✅ **Solution Generated Successfully!**
 
 ## 🔧 Generated Patch
 \`\`\`diff
@@ -134,600 +203,68 @@ $PATCH_CONTENT
 ## 📝 Next Steps
 1. Review the proposed changes carefully
 2. Test the solution in your development environment  
-3. Apply the patch manually if it looks good
+3. Apply the patch manually if it looks good: \`git apply <patch_file>\`
 
 *Generated by SWE-Agent using $MODEL_NAME*"
         
-        post_comment "$MESSAGE"
+        post_comment "$SUCCESS_MESSAGE"
         add_reaction "thumbsup"
+        
     else
-        log "⚠️ No patch file found"
-        post_comment "✅ SWE-Agent completed analysis but didn't generate a patch. Check the logs for details."
-        add_reaction "confused"
+        log "⚠️ No patch found in SWE-Agent output"
+        
+        NO_PATCH_MESSAGE="✅ **SWE-Agent Analysis Complete**
+
+I've analyzed the issue but didn't generate a code patch. This might mean:
+- The issue requires manual investigation
+- More information is needed to provide a solution
+- The problem may already be resolved
+- The issue is not code-related
+
+Feel free to provide more context or ask specific questions!
+
+*Analysis by SWE-Agent using $MODEL_NAME*"
+        
+        post_comment "$NO_PATCH_MESSAGE"
+        add_reaction "thinking_face"
     fi
+    
 else
-    log "❌ SWE-Agent failed"
-    ERROR_LOG=$(tail -20 "$SWE_OUTPUT_DIR/output.log" 2>/dev/null || echo "No error log available")
+    log "❌ SWE-Agent execution failed with exit code: $SWE_EXIT_CODE"
     
-    MESSAGE="❌ **SWE-Agent execution failed**
-
-## Error Details
-\`\`\`
-$ERROR_LOG
-\`\`\`
-
-Please check the issue description and try again."
+    # Extract error information
+    ERROR_INFO=""
+    if [ -f "$OUTPUT_DIR/swe_agent.log" ]; then
+        ERROR_INFO=$(tail -20 "$OUTPUT_DIR/swe_agent.log" 2>/dev/null | grep -E "(Error|Exception|Failed)" | head -3 || echo "Check logs for details")
+    fi
     
-    post_comment "$MESSAGE"
+    FAILURE_MESSAGE="❌ **SWE-Agent execution failed**
+
+I encountered an error while trying to analyze and fix this issue.
+
+## Possible causes:
+- Issue complexity requiring human intervention
+- API rate limits or model constraints  
+- Repository-specific limitations
+- Temporary service issues
+
+$(if [ -n "$ERROR_INFO" ] && [ "$ERROR_INFO" != "Check logs for details" ]; then echo "**Error details:**"; echo "\`\`\`"; echo "$ERROR_INFO"; echo "\`\`\`"; fi)
+
+Please try:
+1. Rephrasing the request or providing more details
+2. Ensuring the issue description is clear
+3. Trying again later if this was a temporary problem
+
+*SWE-Agent using $MODEL_NAME*"
+    
+    post_comment "$FAILURE_MESSAGE"
     add_reaction "confused"
 fi
 
-log "🏁 SWE-Agent Issue Resolver finished"
-        return 1
-    }
-    
-    # Create PR via GitHub API
-    local pr_title="🤖 Fix: ${issue_title}"
-    local pr_body="This pull request was automatically generated by [SWE-Agent](https://github.com/SWE-agent/SWE-agent) to address issue #${issue_number}.
-
-## 🎯 What this PR does
-- Addresses the issue described in #${issue_number}
-- Generated automatically by AI analysis
-
-## 🔍 Review Notes
-- Please review the changes carefully before merging
-- Test the solution in your development environment
-- The AI agent analyzed the issue and generated this fix
-
-## 📋 Issue Reference
-Closes #${issue_number}
-
----
-*This PR was requested by @${user_login} and generated by SWE-Agent*"
-    
-    local pr_payload=$(jq -n \
-        --arg title "$pr_title" \
-        --arg body "$pr_body" \
-        --arg head "$branch_name" \
-        --arg base "$base_branch" \
-        '{title: $title, body: $body, head: $head, base: $base, draft: false}')
-    
-    local pr_url="${GITHUB_API_URL:-https://api.github.com}/repos/${repo}/pulls"
-    
-    local pr_response=$(curl -s -X POST \
-        -H "Authorization: token ${token}" \
-        -H "Accept: application/vnd.github.v3+json" \
-        "$pr_url" \
-        -d "$pr_payload")
-    
-    local pr_html_url=$(echo "$pr_response" | jq -r '.html_url // empty')
-    
-    if [ -n "$pr_html_url" ] && [ "$pr_html_url" != "null" ]; then
-        log "✅ Pull request created: $pr_html_url"
-        echo "$pr_html_url"
-        return 0
-    else
-        log "❌ Failed to create pull request"
-        echo "$pr_response" | jq '.' >&2
-        return 1
-    fi
-}
-
-analyze_request_intent() {
-    local comment_body="$1"
-    local analysis_keywords="$2"
-    local force_patch_keywords="$3"
-    
-    # Convert to lowercase for case-insensitive matching
-    local comment_lower=$(echo "$comment_body" | tr '[:upper:]' '[:lower:]')
-    
-    # Check for analysis-only keywords
-    IFS=',' read -ra ANALYSIS_WORDS <<< "$analysis_keywords"
-    for word in "${ANALYSIS_WORDS[@]}"; do
-        if echo "$comment_lower" | grep -q "\b$word\b"; then
-            echo "analysis"
-            return 0
-        fi
-    done
-    
-    # Check for force patch keywords
-    IFS=',' read -ra PATCH_WORDS <<< "$force_patch_keywords"
-    for word in "${PATCH_WORDS[@]}"; do
-        if echo "$comment_lower" | grep -q "\b$word\b"; then
-            echo "patch"
-            return 0
-        fi
-    done
-    
-    # Default to patch if unclear
-    echo "patch"
-}
-
-get_pr_info() {
-    local repo="$1"
-    local pr_number="$2"
-    local token="$3"
-    
-    local pr_url="${GITHUB_API_URL:-https://api.github.com}/repos/${repo}/pulls/${pr_number}"
-    
-    curl -s -H "Authorization: token ${token}" \
-        -H "Accept: application/vnd.github.v3+json" \
-        "$pr_url"
-}
-
-get_target_commit() {
-    local context="$1"  # issue, pr, or commit
-    local repo="$2"
-    local identifier="$3"  # issue number, pr number, or commit hash
-    local token="$4"
-    
-    case "$context" in
-        "pr")
-            local pr_info=$(get_pr_info "$repo" "$identifier" "$token")
-            local head_sha=$(echo "$pr_info" | jq -r '.head.sha // empty')
-            local base_branch=$(echo "$pr_info" | jq -r '.base.ref // "main"')
-            if [ -n "$head_sha" ] && [ "$head_sha" != "null" ]; then
-                echo "$head_sha:$base_branch"
-            else
-                echo "HEAD:main"
-            fi
-            ;;
-        "issue")
-            echo "HEAD:${INPUT_PR_TARGET_BRANCH:-main}"
-            ;;
-        *)
-            echo "HEAD:${INPUT_PR_TARGET_BRANCH:-main}"
-            ;;
-    esac
-}
-
-log "🚀 SWE-Agent Resolver starting..."
-
-# --- 0. Environment & Input Validation ---
-if [ -z "$INPUT_GITHUB_TOKEN" ]; then log "❌ Error: github_token input is required."; exit 1; fi
-if [ -z "$INPUT_LLM_API_KEY" ]; then log "❌ Error: llm_api_key input is required."; exit 1; fi
-if [ -z "$INPUT_MODEL_NAME" ]; then log "❌ Error: model_name input is required."; exit 1; fi
-
-# Set LLM API Key for SWE-agent
-export OPENAI_API_KEY="$INPUT_LLM_API_KEY"
-export ANTHROPIC_API_KEY="$INPUT_LLM_API_KEY"  # Support for Claude models
-
-TRIGGER_PHRASE="${INPUT_TRIGGER_PHRASE:-@swe-agent}"
-GH_REPO="${GITHUB_REPOSITORY}"
-GH_API_URL="${GITHUB_API_URL:-https://api.github.com}"
-EVENT_PATH="${GITHUB_EVENT_PATH}"
-
-log "🎯 Target Repository: '${GH_REPO}'"
-log "🤖 Model: '${INPUT_MODEL_NAME}'"
-log "💬 Trigger Phrase: '${TRIGGER_PHRASE}'"
-
-# --- 1. Parse Event Payload ---
-EVENT_TYPE="${GITHUB_EVENT_NAME}"
-
-if [ "$EVENT_TYPE" != "issue_comment" ]; then
-    log "⏭️  Skipping: This action only responds to issue comments"
-    exit 0
-fi
-
-if [ ! -f "$EVENT_PATH" ]; then 
-    log "❌ Error: GitHub event payload file not found at '$EVENT_PATH'"
-    exit 1
-fi
-
-COMMENT_BODY=$(jq -r '.comment.body' "$EVENT_PATH")
-COMMENT_ID=$(jq -r '.comment.id' "$EVENT_PATH")
-COMMENT_URL=$(jq -r '.comment.html_url' "$EVENT_PATH")
-ISSUE_NUMBER=$(jq -r '.issue.number' "$EVENT_PATH")
-ISSUE_TITLE=$(jq -r '.issue.title' "$EVENT_PATH")
-REPO_FULL_NAME=$(jq -r '.repository.full_name' "$EVENT_PATH")
-USER_LOGIN=$(jq -r '.comment.user.login' "$EVENT_PATH")
-
-# Check if this is a PR comment vs issue comment
-IS_PR_COMMENT=$(jq -r '.issue.pull_request // false' "$EVENT_PATH")
-PR_NUMBER=""
-if [ "$IS_PR_COMMENT" != "false" ] && [ "$IS_PR_COMMENT" != "null" ]; then
-    PR_NUMBER="$ISSUE_NUMBER"
-    log "📝 PR Comment #${PR_NUMBER}: ${ISSUE_TITLE}"
-else
-    log "📝 Issue #${ISSUE_NUMBER}: ${ISSUE_TITLE}"
-fi
-
-if [ -z "$COMMENT_BODY" ] || [ "$COMMENT_BODY" == "null" ]; then 
-    log "❌ Error: Could not extract comment body"
-    exit 1
-fi
-if [ -z "$ISSUE_NUMBER" ] || [ "$ISSUE_NUMBER" == "null" ]; then 
-    log "❌ Error: Could not extract issue number"
-    exit 1
-fi
-
-if [ -n "$PR_NUMBER" ]; then
-    log "📝 Working on PR #${PR_NUMBER}: ${ISSUE_TITLE}"
-    CONTEXT="pr"
-else
-    log "📝 Working on Issue #${ISSUE_NUMBER}: ${ISSUE_TITLE}"
-    CONTEXT="issue"
-fi
-log "👤 Requested by: @${USER_LOGIN}"
-
-# --- 2. Check for Trigger Phrase & Extract Task ---
-if ! echo "$COMMENT_BODY" | grep -Fq "$TRIGGER_PHRASE"; then
-    log "⏭️  Trigger phrase '${TRIGGER_PHRASE}' not found in comment. Skipping."
-    exit 0
-fi
-
-log "✅ Trigger phrase found! Processing request..."
-
-# Add eyes reaction to show we're processing
-add_reaction "eyes" "$REPO_FULL_NAME" "$COMMENT_ID" "$INPUT_GITHUB_TOKEN"
-
-TASK_DESCRIPTION=$(echo "$COMMENT_BODY" | sed -n "s/.*${TRIGGER_PHRASE}//p" | sed 's/^[ \t]*//;s/[ \t]*$//')
-
-if [ -z "$TASK_DESCRIPTION" ]; then
-    TASK_DESCRIPTION="Please address the issue described above."
-fi
-
-log "📋 Task: ${TASK_DESCRIPTION}"
-
-# Analyze request intent
-REQUEST_INTENT=$(analyze_request_intent "$TASK_DESCRIPTION" "${INPUT_ANALYSIS_ONLY_KEYWORDS:-analyze,review,opinion,explain,help,question,discuss,thoughts}" "${INPUT_FORCE_PATCH_KEYWORDS:-fix,solve,implement,create,build,patch,code}")
-log "🎯 Request Intent: ${REQUEST_INTENT}"
-
-# Determine target commit and branch for cloning
-TARGET_INFO=$(get_target_commit "$CONTEXT" "$REPO_FULL_NAME" "$ISSUE_NUMBER" "$INPUT_GITHUB_TOKEN")
-TARGET_COMMIT=$(echo "$TARGET_INFO" | cut -d':' -f1)
-TARGET_BRANCH=$(echo "$TARGET_INFO" | cut -d':' -f2)
-
-log "🎯 Target commit: ${TARGET_COMMIT}, branch: ${TARGET_BRANCH}"
-
-# Post initial status comment
-INITIAL_MESSAGE="🤖 **SWE-Agent is working on this issue...**
-
-**Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
-**Requested by:** @${USER_LOGIN}
-**Task:** ${TASK_DESCRIPTION}
-**Model:** ${INPUT_MODEL_NAME}
-**Context:** $(if [ "$CONTEXT" = "pr" ]; then echo "Pull Request #${PR_NUMBER}"; else echo "Issue #${ISSUE_NUMBER}"; fi)
-**Intent:** ${REQUEST_INTENT}
-
-⏳ Analyzing the issue and generating a solution. This may take a few minutes..."
-
-post_github_comment "$INITIAL_MESSAGE" "$REPO_FULL_NAME" "$ISSUE_NUMBER" "$INPUT_GITHUB_TOKEN"
-
-# --- 3. Fetch Issue Details & Create Problem Description ---
-TEMP_DIR="/tmp/swe_agent_run_$$"
-mkdir -p "$TEMP_DIR"
-PROBLEM_FILE_PATH="${TEMP_DIR}/problem_description.md"
-TARGET_REPO_CLONE_PATH="${TEMP_DIR}/repo"
-
-log "📥 Fetching issue details..."
-ISSUE_API_URL="${GH_API_URL}/repos/${REPO_FULL_NAME}/issues/${ISSUE_NUMBER}"
-ISSUE_DATA_JSON=$(curl -s -H "Authorization: token ${INPUT_GITHUB_TOKEN}" -H "Accept: application/vnd.github.v3+json" "$ISSUE_API_URL")
-
-ISSUE_BODY=$(echo "$ISSUE_DATA_JSON" | jq -r '.body')
-if [ "$ISSUE_BODY" == "null" ]; then 
-    ISSUE_BODY="No description provided for this issue."
-fi
-
-# Create comprehensive problem description
-cat << EOF > "$PROBLEM_FILE_PATH"
-# Issue: ${ISSUE_TITLE}
-
-**Repository:** ${REPO_FULL_NAME}
-**Issue Number:** #${ISSUE_NUMBER}
-**Requested by:** @${USER_LOGIN}
-
-## User Request
-${TASK_DESCRIPTION}
-
-## Original Issue Description
-${ISSUE_BODY}
-
-## Instructions
-Please analyze the issue and provide a solution. Focus on:
-1. Understanding the problem described
-2. Identifying the root cause
-3. Implementing a fix that addresses the issue
-4. Ensuring the solution is robust and follows best practices
-EOF
-
-log "📄 Problem description created"
-
-# --- 4. Clone Target Repository ---
-log "📦 Cloning repository..."
-
-# For PR comments, clone at the specific PR head commit
-if [ "$CONTEXT" = "pr" ] && [ -n "$PR_NUMBER" ]; then
-    PR_INFO=$(get_pr_info "$REPO_FULL_NAME" "$PR_NUMBER" "$INPUT_GITHUB_TOKEN")
-    PR_HEAD_SHA=$(echo "$PR_INFO" | jq -r '.head.sha // empty')
-    
-    if [ -n "$PR_HEAD_SHA" ] && [ "$PR_HEAD_SHA" != "null" ]; then
-        log "🔄 Cloning PR #${PR_NUMBER} at commit ${PR_HEAD_SHA}"
-        CLONE_COMMAND="git clone --depth 1 https://x-access-token:${INPUT_GITHUB_TOKEN}@github.com/${REPO_FULL_NAME}.git $TARGET_REPO_CLONE_PATH && cd $TARGET_REPO_CLONE_PATH && git fetch origin ${PR_HEAD_SHA} && git checkout ${PR_HEAD_SHA}"
-    else
-        log "⚠️  Could not get PR head commit, using default branch"
-        CLONE_COMMAND="git clone --depth 1 https://x-access-token:${INPUT_GITHUB_TOKEN}@github.com/${REPO_FULL_NAME}.git $TARGET_REPO_CLONE_PATH"
-    fi
-else
-    # For issues, clone the default branch
-    CLONE_COMMAND="git clone --depth 1 https://x-access-token:${INPUT_GITHUB_TOKEN}@github.com/${REPO_FULL_NAME}.git $TARGET_REPO_CLONE_PATH"
-fi
-
-if ! eval "$CLONE_COMMAND" 2>/dev/null; then
-    log "❌ Failed to clone repository"
-    ERROR_MESSAGE="❌ **Failed to clone repository**
-
-I encountered an error while trying to clone the repository. This might be due to:
-- Repository access permissions
-- Network connectivity issues
-- Invalid repository URL
-- PR branch may have been deleted
-
-Please check the repository permissions and try again."
-    
-    post_github_comment "$ERROR_MESSAGE" "$REPO_FULL_NAME" "$ISSUE_NUMBER" "$INPUT_GITHUB_TOKEN"
-    add_reaction "-1" "$REPO_FULL_NAME" "$COMMENT_ID" "$INPUT_GITHUB_TOKEN"
-    exit 1
-fi
-
-log "✅ Repository cloned successfully"
-
-# --- 5. Run SWE-agent ---
-log "🧠 Starting SWE-agent analysis..."
-
-SWE_AGENT_COMMAND=(
-    "python" "-m" "sweagent" "run"
-    "--agent.model.name" "${INPUT_MODEL_NAME}"
-    "--problem_statement.path" "${PROBLEM_FILE_PATH}"
-    "--env.repo.path" "${TARGET_REPO_CLONE_PATH}"
-    "--output_dir" "${TEMP_DIR}"
-    "--env.deployment.type=local"
-    "--actions.apply_patch_locally=false"
-    "--config" "/app/swe-agent/config/default.yaml"
-)
-
-# Append additional user-provided arguments
-if [ -n "$INPUT_SWE_AGENT_ARGS" ]; then
-    IFS=' ' read -ra ARGS <<< "$INPUT_SWE_AGENT_ARGS"
-    SWE_AGENT_COMMAND+=("${ARGS[@]}")
-fi
-
-SWE_AGENT_LOG_FILE="${TEMP_DIR}/swe_agent_run.log"
-AGENT_EXIT_CODE=0
-
-# Change to temp directory for execution
-ORIGINAL_PWD=$(pwd)
-cd "${TEMP_DIR}"
-
-log "⚙️  Executing SWE-agent..."
-log "Command: ${SWE_AGENT_COMMAND[*]}"
-
-# Execute SWE-agent with proper error handling
-if "${SWE_AGENT_COMMAND[@]}" > "$SWE_AGENT_LOG_FILE" 2>&1; then
-    AGENT_EXIT_CODE=0
-    log "✅ SWE-agent completed successfully"
-else
-    AGENT_EXIT_CODE=$?
-    log "❌ SWE-agent failed with exit code: ${AGENT_EXIT_CODE}"
-fi
-
-cd "${ORIGINAL_PWD}"
-
-# --- 6. Process Results ---
-log "📋 Processing SWE-agent results..."
-
-if [ "$AGENT_EXIT_CODE" -eq 0 ]; then
-    # Look for patches in various formats
-    PATCH_CONTENT=""
-    PATCH_FOUND=false
-    
-    # Search for patch files
-    PATCH_FILES=$(find "${TEMP_DIR}" -name "*.patch" -type f 2>/dev/null || true)
-    if [ -n "$PATCH_FILES" ]; then
-        FIRST_PATCH=$(echo "$PATCH_FILES" | head -n 1)
-        if [ -s "$FIRST_PATCH" ]; then
-            PATCH_CONTENT=$(cat "$FIRST_PATCH")
-            PATCH_FOUND=true
-            log "✅ Found patch file: $FIRST_PATCH"
-        fi
-    fi
-    
-    # Search for .pred files if no patch found
-    if [ "$PATCH_FOUND" = false ]; then
-        PRED_FILES=$(find "${TEMP_DIR}" -name "*.pred" -type f 2>/dev/null || true)
-        if [ -n "$PRED_FILES" ]; then
-            FIRST_PRED=$(echo "$PRED_FILES" | head -n 1)
-            if [ -s "$FIRST_PRED" ]; then
-                PATCH_CONTENT=$(jq -r '.model_patch // empty' "$FIRST_PRED" 2>/dev/null | grep -v '^null$' || true)
-                if [ -n "$PATCH_CONTENT" ] && [ "$PATCH_CONTENT" != "null" ]; then
-                    PATCH_FOUND=true
-                    log "✅ Extracted patch from prediction file: $FIRST_PRED"
-                fi
-            fi
-        fi
-    fi
-    
-    # Generate success response
-    if [ "$PATCH_FOUND" = true ] && [ -n "$PATCH_CONTENT" ]; then
-        # Truncate patch if too long for GitHub comment
-        MAX_PATCH_LENGTH=${INPUT_MAX_PATCH_SIZE:-50000}
-        if [ ${#PATCH_CONTENT} -gt $MAX_PATCH_LENGTH ]; then
-            TRUNCATED_PATCH=$(echo "$PATCH_CONTENT" | head -c $MAX_PATCH_LENGTH)
-            PATCH_DISPLAY="${TRUNCATED_PATCH}\n\n... *(patch truncated - full patch is ${#PATCH_CONTENT} characters)*"
-        else
-            PATCH_DISPLAY="$PATCH_CONTENT"
-        fi
-        
-        # Determine if we should create a PR
-        CREATE_PR=false
-        if [ "${INPUT_AUTO_PR:-true}" = "true" ] && [ "$REQUEST_INTENT" = "patch" ]; then
-            CREATE_PR=true
-        fi
-        
-        if [ "$CREATE_PR" = "true" ]; then
-            # Create PR automatically
-            PR_URL=$(create_pull_request "$REPO_FULL_NAME" "$INPUT_GITHUB_TOKEN" "$PATCH_CONTENT" "$ISSUE_NUMBER" "$ISSUE_TITLE" "$USER_LOGIN" "$TARGET_BRANCH" "$TARGET_REPO_CLONE_PATH")
-            
-            if [ $? -eq 0 ] && [ -n "$PR_URL" ]; then
-                SUCCESS_MESSAGE="✅ **Solution Generated & Pull Request Created!**
-
-I've analyzed the issue and created a pull request with the fix:
-
-🔗 **Pull Request:** $PR_URL
-
-## 🔧 **Generated Patch Preview**
-
-\`\`\`diff
-${PATCH_DISPLAY}
-\`\`\`
-
-## 📝 **Next Steps**
-1. ✅ Pull request has been created automatically
-2. 👀 Review the changes in the PR
-3. 🧪 Test the solution if needed
-4. ✅ Merge when you're satisfied with the fix
-5. 💬 Comment here if you need any modifications
-
----
-*Powered by SWE-Agent using ${INPUT_MODEL_NAME}*"
-            else
-                # Fall back to patch display if PR creation failed
-                SUCCESS_MESSAGE="✅ **Solution Generated Successfully!**
-
-I've analyzed the issue and generated a patch to address it. Here's what I found and fixed:
-
-## 🔧 **Generated Patch**
-
-\`\`\`diff
-${PATCH_DISPLAY}
-\`\`\`
-
-## 📝 **Next Steps**
-1. Review the proposed changes carefully
-2. Test the solution in your development environment  
-3. Apply the patch if it looks good: \`git apply <patch_file>\`
-4. Feel free to ask questions or request modifications!
-
-⚠️ *Note: Automatic PR creation failed, but the patch above should work.*
-
----
-*Powered by SWE-Agent using ${INPUT_MODEL_NAME}*"
-            fi
-        else
-            # Just display the patch without creating PR
-            SUCCESS_MESSAGE="✅ **Solution Generated Successfully!**
-
-I've analyzed the issue and generated a patch to address it. Here's what I found and fixed:
-
-## 🔧 **Generated Patch**
-
-\`\`\`diff
-${PATCH_DISPLAY}
-\`\`\`
-
-## 📝 **Next Steps**
-1. Review the proposed changes carefully
-2. Test the solution in your development environment  
-3. Apply the patch if it looks good: \`git apply <patch_file>\`
-4. Feel free to ask questions or request modifications!
-
----
-*Powered by SWE-Agent using ${INPUT_MODEL_NAME}*"
-        fi
-        
-        post_github_comment "$SUCCESS_MESSAGE" "$REPO_FULL_NAME" "$ISSUE_NUMBER" "$INPUT_GITHUB_TOKEN"
-        add_reaction "+1" "$REPO_FULL_NAME" "$COMMENT_ID" "$INPUT_GITHUB_TOKEN"
-        
-    else
-        # No patch but successful completion - analysis or opinion request
-        if [ "$REQUEST_INTENT" = "analysis" ]; then
-            NO_PATCH_MESSAGE="✅ **Analysis Complete**
-
-I've analyzed the issue as requested. Based on my examination of the codebase and the issue description:
-
-## 🔍 **My Analysis**
-
-$(if [ -f "$SWE_AGENT_LOG_FILE" ]; then
-    # Extract meaningful analysis from logs
-    tail -n 50 "$SWE_AGENT_LOG_FILE" | grep -E "(Analysis|Found|Issue|Problem|Solution)" | head -n 10 | sed 's/^/- /'
-fi)
-
-## 💡 **Recommendations**
-
-- The issue requires careful consideration of the codebase
-- Manual investigation may be needed for complex scenarios
-- Consider the implications of any changes on existing functionality
-
-## 📝 **Next Steps**
-- Review the analysis above
-- Ask specific questions if you need clarification
-- Request a fix implementation if you'd like me to generate code changes
-
----
-*Analysis provided by SWE-Agent using ${INPUT_MODEL_NAME}*"
-        else
-            NO_PATCH_MESSAGE="✅ **Analysis Complete**
-
-I've successfully analyzed the issue, but no code changes were needed or I couldn't generate a specific patch. This might mean:
-
-- The issue requires manual investigation
-- The problem is in documentation or configuration  
-- More information is needed to provide a solution
-- The issue may already be resolved
-
-You can check the detailed analysis in the logs. Feel free to provide more context if needed!
-
----
-*Powered by SWE-Agent using ${INPUT_MODEL_NAME}*"
-        fi
-        
-        post_github_comment "$NO_PATCH_MESSAGE" "$REPO_FULL_NAME" "$ISSUE_NUMBER" "$INPUT_GITHUB_TOKEN"
-        add_reaction "thinking_face" "$REPO_FULL_NAME" "$COMMENT_ID" "$INPUT_GITHUB_TOKEN"
-    fi
-    
-else
-    # SWE-agent failed
-    log "❌ SWE-agent execution failed"
-    
-    # Extract meaningful error from logs
-    ERROR_SUMMARY=""
-    if [ -f "$SWE_AGENT_LOG_FILE" ]; then
-        # Look for common error patterns
-        ERROR_SUMMARY=$(tail -n 20 "$SWE_AGENT_LOG_FILE" | grep -E "(Error|Exception|Failed)" | head -n 3 || true)
-    fi
-    
-    FAILURE_MESSAGE="❌ **Unable to Process Issue**
-
-I encountered an error while trying to analyze and fix this issue. This might be due to:
-
-- Complexity of the issue requiring human intervention
-- Model limitations or API issues
-- Repository-specific constraints
-- Configuration problems
-
-$(if [ -n "$ERROR_SUMMARY" ]; then echo "**Error details:**"; echo "\`\`\`"; echo "$ERROR_SUMMARY"; echo "\`\`\`"; fi)
-
-Please try:
-1. Simplifying the request or providing more specific details
-2. Checking if the issue description is clear and complete
-3. Trying again later if this was a temporary issue
-
----
-*SWE-Agent using ${INPUT_MODEL_NAME}*"
-    
-    post_github_comment "$FAILURE_MESSAGE" "$REPO_FULL_NAME" "$ISSUE_NUMBER" "$INPUT_GITHUB_TOKEN"
-    add_reaction "confused" "$REPO_FULL_NAME" "$COMMENT_ID" "$INPUT_GITHUB_TOKEN"
-fi
-
-# --- 7. Cleanup ---
+# Cleanup
 log "🧹 Cleaning up temporary files..."
 rm -rf "$TEMP_DIR"
 
-log "🎉 SWE-Agent Resolver completed!"
+log "🏁 SWE-Agent Issue Resolver finished"
 
-# Exit with appropriate code
-if [ "$AGENT_EXIT_CODE" -eq 0 ]; then
-    exit 0
-else
-    exit 1
-fi
+exit $SWE_EXIT_CODE
