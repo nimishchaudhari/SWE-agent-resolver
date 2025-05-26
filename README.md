@@ -1,21 +1,161 @@
 # SWE-Agent GitHub Actions Resolver
 
-A simple GitHub Action that automatically resolves issues using [SWE-Agent](https://github.com/SWE-agent/SWE-agent) - an AI-powered autonomous software engineer.
+A complete GitHub Action that automatically resolves issues using [SWE-Agent](https://github.com/SWE-agent/SWE-agent) - an AI-powered autonomous software engineer. Generates patches and automatically creates Pull Requests.
 
 ## ✨ Features
 
 - 🤖 **AI-Powered Issue Resolution**: Uses SWE-Agent with models like GPT-4o or Claude
 - 💬 **Comment-Triggered**: Simply comment `@swe-agent fix this` on any issue
 - 🔧 **Automatic Patch Generation**: Generates code patches to resolve issues
-- 📝 **Clear Communication**: Posts results directly to GitHub issues
-- ⚡ **Simple Setup**: Just add the action to your repository
+- 🔄 **Auto Pull Request Creation**: Automatically applies patches and creates PRs
+- 📝 **Real-time Progress Updates**: Posts live updates to GitHub issues
+- ⚡ **Complete Automation**: From analysis to PR creation, fully automated
 
 ## 🚀 Quick Setup
 
-1. **Add the workflow file** to your repository at `.github/workflows/swe-resolver.yml`:
+### Option 1: Complete Workflow (Recommended)
+Add this workflow file to your repository at `.github/workflows/swe-agent.yml`:
 
 ```yaml
 name: SWE-Agent Issue Resolver
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate-patch:
+    name: Generate Patch with SWE-Agent
+    if: github.event.issue.pull_request == null && contains(github.event.comment.body, '@swe-agent') && github.event.comment.user.login != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    outputs:
+      patch_generated: ${{ steps.swe-agent.outputs.patch_generated }}
+      patch_content: ${{ steps.swe-agent.outputs.patch_content }}
+      execution_time: ${{ steps.swe-agent.outputs.execution_time }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      
+      - name: Run SWE-Agent
+        id: swe-agent
+        uses: nimishchaudhari/swe-agent-resolver@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          llm_api_key: ${{ secrets.OPENAI_API_KEY }}
+          model_name: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}
+          trigger_phrase: '@swe-agent'
+          timeout_minutes: 45
+
+  apply-patch:
+    name: Apply Patch and Create PR
+    needs: generate-patch
+    if: needs.generate-patch.outputs.patch_generated == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      
+      - name: Set up Python (for linting)
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      
+      - name: Install GitHub CLI
+        run: |
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh
+      
+      - name: Install linting tools (optional)
+        run: |
+          pip install black isort flake8 || true
+      
+      - name: Apply patch and create PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PATCH_CONTENT: ${{ needs.generate-patch.outputs.patch_content }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          MODEL_NAME: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}
+          EXECUTION_TIME: ${{ needs.generate-patch.outputs.execution_time }}
+        run: |
+          set -e
+          
+          # Configure git
+          git config --global user.name "swe-agent-bot[bot]"
+          git config --global user.email "swe-agent-bot[bot]@users.noreply.github.com"
+          
+          # Create branch
+          BRANCH_NAME="swe-agent-fix-issue-${ISSUE_NUMBER}-$(date +%s)"
+          git checkout -b "$BRANCH_NAME"
+          
+          # Apply patch
+          echo "$PATCH_CONTENT" > /tmp/swe_agent_fix.patch
+          
+          if git apply --check /tmp/swe_agent_fix.patch; then
+            git apply /tmp/swe_agent_fix.patch
+            
+            # Run linting/formatting if tools are available
+            if command -v black >/dev/null 2>&1; then
+              find . -name "*.py" -exec black {} + || true
+            fi
+            
+            if command -v isort >/dev/null 2>&1; then
+              find . -name "*.py" -exec isort {} + || true
+            fi
+            
+            # Check if there are any changes to commit
+            if git diff --cached --quiet && git diff --quiet; then
+              echo "No changes detected after applying patch"
+              exit 1
+            fi
+            
+            # Commit changes
+            git add .
+            git commit -m "Fix: Apply patch for issue #${ISSUE_NUMBER} by SWE-Agent"
+            
+            # Push branch and create PR
+            git push origin "$BRANCH_NAME"
+            
+            PR_TITLE="SWE-Agent Fix for Issue #${ISSUE_NUMBER}: ${ISSUE_TITLE}"
+            PR_BODY="Automatically generated by SWE-Agent. Issue: #${ISSUE_NUMBER}"
+            
+            DEFAULT_BRANCH=$(gh api repos/${{ github.repository }} --jq .default_branch)
+            PR_URL=$(gh pr create --title "$PR_TITLE" --body "$PR_BODY" --base "$DEFAULT_BRANCH" --head "$BRANCH_NAME")
+            
+            # Update issue comment with PR link
+            COMMENT_ID="${{ github.event.comment.id }}"
+            gh api repos/${{ github.repository }}/issues/comments/$COMMENT_ID \
+              --method PATCH \
+              --field body="✅ **Solution Generated & Pull Request Created!** [View PR](${PR_URL})"
+          else
+            echo "Patch could not be applied cleanly - posting patch for manual review"
+            exit 1
+          fi
+```
+
+### Option 2: Patch Generation Only
+If you only want patch generation without automatic PR creation, use this simpler workflow:
+
+```yaml
+name: SWE-Agent Patch Generator
 
 on:
   issue_comment:
@@ -27,7 +167,7 @@ permissions:
 
 jobs:
   resolve_issue:
-    name: Resolve Issue with SWE-Agent
+    name: Generate Patch with SWE-Agent
     runs-on: ubuntu-latest
     if: |
       github.event.comment.user.login != 'github-actions[bot]' &&
@@ -35,16 +175,21 @@ jobs:
     
     steps:
       - name: Run SWE-Agent Resolver
-        uses: nimishchaudhari/SWE-agent-resolver@main
+        uses: nimishchaudhari/swe-agent-resolver@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           llm_api_key: ${{ secrets.OPENAI_API_KEY }}
           model_name: 'gpt-4o'
 ```
 
-2. **Add your OpenAI API key** as a repository secret named `OPENAI_API_KEY`
+## 🔧 Required Setup
 
-3. **That's it!** Comment `@swe-agent fix this issue` on any issue to trigger the resolver
+1. **Add your API key** as a repository secret:
+   - Go to your repository → Settings → Secrets and variables → Actions
+   - Add a new secret named `OPENAI_API_KEY` with your OpenAI API key
+
+2. **Optional: Set model preference** as a repository variable:
+   - Add a variable named `SWE_AGENT_MODEL` with value like `gpt-4o`, `claude-3.5-sonnet`, etc.
 
 ## 🎯 Usage
 
@@ -52,15 +197,24 @@ Simply comment on any GitHub issue with the trigger phrase:
 
 ```
 @swe-agent fix this bug
-@swe-agent solve this problem
+@swe-agent solve this problem  
 @swe-agent help with this issue
 ```
 
-The action will:
-1. 👀 React with eyes to show it's processing
-2. 🤖 Run SWE-Agent to analyze and fix the issue
-3. 📄 Post the generated patch as a comment
-4. ✅ React with thumbs up on success or 😕 on failure
+### Complete Workflow Process:
+1. **👀 Processing**: Reacts with eyes to show it's processing
+2. **🤖 Analysis**: SWE-Agent analyzes the issue and codebase
+3. **🔧 Patch Generation**: Creates a code patch to resolve the issue
+4. **📄 Progress Updates**: Posts live updates to the issue comment
+5. **🔄 Auto PR Creation**: Applies patch and creates a Pull Request
+6. **✅ Completion**: Updates comment with PR link for review
+
+### Patch-Only Workflow Process:
+1. **👀 Processing**: Reacts with eyes to show it's processing  
+2. **🤖 Analysis**: SWE-Agent analyzes the issue and codebase
+3. **🔧 Patch Generation**: Creates a code patch to resolve the issue
+4. **📄 Result**: Posts the generated patch as a comment
+5. **✅ Complete**: Reacts with thumbs up on success or 😕 on failure
 
 ## ⚙️ Configuration
 

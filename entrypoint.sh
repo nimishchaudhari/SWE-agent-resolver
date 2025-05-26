@@ -1,13 +1,13 @@
 #!/bin/bash
 
 set -e
+set -o pipefail
 
 # --- Configuration ---
 GITHUB_TOKEN="${INPUT_GITHUB_TOKEN}"
 TRIGGER_PHRASE="${INPUT_TRIGGER_PHRASE:-@swe-agent}"
 LLM_API_KEY="${INPUT_LLM_API_KEY}"
 MODEL_NAME="${INPUT_MODEL_NAME:-gpt-4o}"
-TIMEOUT_MINUTES="${INPUT_TIMEOUT_MINUTES:-30}"
 
 # GitHub API URL
 GITHUB_API_URL="${GITHUB_API_URL:-https://api.github.com}"
@@ -112,7 +112,6 @@ INITIAL_MESSAGE="🤖 **SWE-Agent is working on this issue...**
 
 **Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
 **Model:** ${MODEL_NAME}
-**Timeout:** ${TIMEOUT_MINUTES} minutes
 
 ## 📊 Progress Status
 ⏳ **Starting up...** - Initializing SWE-Agent environment
@@ -148,7 +147,9 @@ if ! git clone "$REPO_URL" "$REPO_DIR"; then
     exit 1
 fi
 
-cd "$REPO_DIR"
+# Change working directory to the PARENT of the cloned repo
+cd "$TEMP_DIR"
+log "ℹ️ Changed working directory to $TEMP_DIR"
 
 # Create problem statement file
 PROBLEM_STATEMENT_FILE="$OUTPUT_DIR/problem_statement.md"
@@ -188,35 +189,43 @@ else
     log "⚠️ Config file /app/swe-agent/config/default.yaml not found or not readable."
 fi
 
-log "🩺 Attempting 'sweagent --version'..."
-SWEAGENT_VERSION_OUTPUT_FILE="$TEMP_DIR/sweagent_version_output.log"
-if sweagent --version > "$SWEAGENT_VERSION_OUTPUT_FILE" 2>&1; then
-    log "✅ 'sweagent --version' succeeded."
-    if [ -s "$SWEAGENT_VERSION_OUTPUT_FILE" ]; then
-        log "📋 Version command output:"
-        cat "$SWEAGENT_VERSION_OUTPUT_FILE" | while IFS= read -r line; do log "  $line"; done
+log "🩺 Attempting 'sweagent -h'..."
+SWEAGENT_HELP_OUTPUT_FILE="$TEMP_DIR/sweagent_help_output.log"
+if sweagent -h > "$SWEAGENT_HELP_OUTPUT_FILE" 2>&1; then
+    log "✅ 'sweagent -h' succeeded."
+    if [ -s "$SWEAGENT_HELP_OUTPUT_FILE" ]; then
+        log "📋 Help command output (first 15 lines):"
+        head -n 15 "$SWEAGENT_HELP_OUTPUT_FILE" | while IFS= read -r line; do log "  $line"; done
     else
-        log "ℹ️ 'sweagent --version' produced no output, but exited successfully."
+        # This case should ideally not happen for a successful -h command
+        log "ℹ️ 'sweagent -h' produced no output, but exited successfully."
     fi
 else
-    VERSION_EXIT_CODE=$?
-    log "❌ 'sweagent --version' failed with exit code $VERSION_EXIT_CODE."
-    VERSION_OUTPUT_ON_FAILURE=""
-    if [ -s "$SWEAGENT_VERSION_OUTPUT_FILE" ]; then
-        log "📋 Version command output on failure:"
-        cat "$SWEAGENT_VERSION_OUTPUT_FILE" | while IFS= read -r line; do log "  $line"; done
-        VERSION_OUTPUT_ON_FAILURE=$(cat "$SWEAGENT_VERSION_OUTPUT_FILE")
+    HELP_EXIT_CODE=$?
+    log "❌ 'sweagent -h' failed with exit code $HELP_EXIT_CODE."
+    HELP_OUTPUT_ON_FAILURE=""
+    GITHUB_COMMENT_BODY_PREFIX="❌ **Critical Error:** \`sweagent -h\` failed with exit code ${HELP_EXIT_CODE}. SWE-Agent may not be installed correctly or the help command is malfunctioning."
+    
+    if [ -s "$SWEAGENT_HELP_OUTPUT_FILE" ]; then
+        log "📋 Help command output on failure:"
+        cat "$SWEAGENT_HELP_OUTPUT_FILE" | while IFS= read -r line; do log "  $line"; done
+        HELP_OUTPUT_ON_FAILURE=$(cat "$SWEAGENT_HELP_OUTPUT_FILE")
+        GITHUB_COMMENT_BODY_SUFFIX="<details><summary>Command Output</summary>
+
+\`\`\`
+${HELP_OUTPUT_ON_FAILURE}
+\`\`\`
+
+</details>"
+        ERROR_MESSAGE="${GITHUB_COMMENT_BODY_PREFIX}
+
+${GITHUB_COMMENT_BODY_SUFFIX}"
     else
-        log "⚠️ 'sweagent --version' failed with no output."
-        VERSION_OUTPUT_ON_FAILURE="No output captured."
+        log "⚠️ 'sweagent -h' failed with no output."
+        HELP_OUTPUT_ON_FAILURE="No output captured."
+        ERROR_MESSAGE="${GITHUB_COMMENT_BODY_PREFIX} No output was captured."
     fi
     
-    ERROR_MESSAGE="❌ Critical Error: \`sweagent --version\` failed with exit code ${VERSION_EXIT_CODE}. SWE-Agent may not be installed correctly.
-
-Output:
-\`\`\`
-${VERSION_OUTPUT_ON_FAILURE}
-\`\`\`"
     if [ -n "$PROGRESS_COMMENT_ID" ]; then
         update_comment "$PROGRESS_COMMENT_ID" "$ERROR_MESSAGE"
     else
@@ -229,35 +238,40 @@ fi
 
 log "🤖 Running SWE-Agent with model: $MODEL_NAME"
 
-# Validate timeout (minimum 5 minutes for SWE-Agent to work effectively)
-if [ "$TIMEOUT_MINUTES" -lt 5 ]; then
-    log "⚠️ Timeout too short ($TIMEOUT_MINUTES min), setting to 5 minutes minimum"
-    TIMEOUT_MINUTES=5
-fi
-
 # Execute SWE-Agent with correct 1.0+ command format
-timeout "${TIMEOUT_MINUTES}m" sweagent run \
+sweagent run \
     --agent.model.name "$MODEL_NAME" \
     --agent.model.per_instance_cost_limit 2.0 \
     --env.repo.path "$REPO_DIR" \
+    --env.deployment.type "local" \
     --problem_statement.path "$PROBLEM_STATEMENT_FILE" \
     --output_dir "$OUTPUT_DIR" \
     --config /app/swe-agent/config/default.yaml \
-    > "$OUTPUT_DIR/swe_agent.log" 2>&1
+    --actions.apply_patch_locally false \
+    2>&1 | tee "$OUTPUT_DIR/swe_agent.log"
 
-SWE_EXIT_CODE=$?
+SWE_EXIT_CODE=${PIPESTATUS[0]}
 
 if [ $SWE_EXIT_CODE -eq 0 ]; then
     log "✅ SWE-Agent completed successfully"
     
-    # Update progress comment with completion status
-    local start_time_file="$TEMP_DIR/start_time"
-    local elapsed_minutes=0
+    start_time_file="$TEMP_DIR/start_time"
+    elapsed_minutes_str="N/A"
     if [ -f "$start_time_file" ]; then
-        local start_time=$(cat "$start_time_file")
-        elapsed_minutes=$(( ($(date +%s) - start_time) / 60 ))
+        start_time_val=$(cat "$start_time_file")
+        current_time_val=$(date +%s)
+        if [[ "$start_time_val" =~ ^[0-9]+$ ]] && [[ "$current_time_val" =~ ^[0-9]+$ ]] && [ "$start_time_val" -le "$current_time_val" ]; then
+            elapsed_seconds=$((current_time_val - start_time_val))
+            elapsed_minutes=$((elapsed_seconds / 60))
+            if [ "$elapsed_minutes" -gt 0 ]; then
+                elapsed_minutes_str="${elapsed_minutes} minutes"
+            elif [ "$elapsed_seconds" -gt 0 ]; then
+                elapsed_minutes_str="${elapsed_seconds} seconds"
+            else
+                elapsed_minutes_str="< 1 second"
+            fi
+        fi
     fi
-    update_progress "✅ **Analysis complete!** Processing results..." "$elapsed_minutes" "$OUTPUT_DIR/swe_agent.log"
     
     # Look for patches in SWE-Agent 1.0 output format
     PATCH_FOUND=false
@@ -305,37 +319,33 @@ if [ $SWE_EXIT_CODE -eq 0 ]; then
 ...
 (Patch truncated - too long for comment)"
         fi
+
+        # Set action outputs
+        echo "patch_generated=true" >> $GITHUB_OUTPUT
+        echo "execution_time=${elapsed_minutes_str}" >> $GITHUB_OUTPUT
         
-        FINAL_MESSAGE="✅ **Solution Generated Successfully!**
+        # Write patch content to a file and set output
+        PATCH_OUTPUT_FILE="$GITHUB_WORKSPACE/swe_agent_patch.txt"
+        echo "$PATCH_CONTENT" > "$PATCH_OUTPUT_FILE"
+        echo "patch_content<<EOF" >> $GITHUB_OUTPUT
+        echo "$PATCH_CONTENT" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        log "✅ Patch generated and saved to outputs"
+        
+        FINAL_MESSAGE="✅ **Solution Generated!**
 
 **Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
 **Model:** ${MODEL_NAME}
-**Execution Time:** Complete
+**Execution Time:** ${elapsed_minutes_str}
 
 ## 🔧 Generated Patch
 \`\`\`diff
 $PATCH_CONTENT
 \`\`\`
 
-## 📝 Next Steps
-1. **Review** the proposed changes carefully
-2. **Test** the solution in your development environment  
-3. **Apply** the patch if it looks good: \`git apply <patch_file>\`
-4. **Verify** the fix resolves the original issue
-
-## 🎯 How to Apply This Patch
-\`\`\`bash
-# Save the patch to a file
-curl -o fix.patch \"data:text/plain,$(echo "$PATCH_CONTENT" | sed 's/"/\\"/g')\"
-
-# Apply the patch
-git apply fix.patch
-
-# Or apply directly (copy the diff content to a file)
-git apply <<'EOF'
-$PATCH_CONTENT
-EOF
-\`\`\`
+## 🔄 Processing...
+The patch is being processed and a Pull Request will be created shortly.
 
 ---
 *✨ Generated by SWE-Agent using $MODEL_NAME*"
@@ -352,11 +362,17 @@ EOF
     else
         log "⚠️ No patch found in SWE-Agent output"
         
+        # Set action outputs for no patch
+        echo "patch_generated=false" >> $GITHUB_OUTPUT
+        echo "execution_time=${elapsed_minutes_str}" >> $GITHUB_OUTPUT
+        echo "patch_content=" >> $GITHUB_OUTPUT
+        
         FINAL_MESSAGE="✅ **SWE-Agent Analysis Complete**
 
 **Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
 **Model:** ${MODEL_NAME}
 **Result:** Analysis completed but no patch generated
+**Execution Time:** ${elapsed_minutes_str}
 
 ## 🔍 Analysis Results
 I've analyzed the issue but didn't generate a code patch. This might mean:
@@ -391,29 +407,45 @@ Feel free to comment with additional information and trigger the agent again!
     
 else
     # SWE-Agent failed - determine the cause and update progress comment
-    local start_time_file="$TEMP_DIR/start_time"
-    local elapsed_minutes=0
+    start_time_file="$TEMP_DIR/start_time"
+    run_duration_str="N/A"
     if [ -f "$start_time_file" ]; then
-        local start_time=$(cat "$start_time_file")
-        elapsed_minutes=$(( ($(date +%s) - start_time) / 60 ))
+        start_time_s=$(cat "$start_time_file")
+        current_time_s=$(date +%s)
+        if [[ "$start_time_s" =~ ^[0-9]+$ ]] && [[ "$current_time_s" =~ ^[0-9]+$ ]] && [ "$start_time_s" -le "$current_time_s" ]; then
+            run_seconds=$((current_time_s - start_time_s))
+            elapsed_minutes_val=$((run_seconds / 60))
+            if [ "$elapsed_minutes_val" -gt 0 ]; then
+                run_duration_str="${elapsed_minutes_val} minutes"
+            elif [ "$run_seconds" -gt 0 ]; then
+                run_duration_str="${run_seconds} seconds"
+            else
+                run_duration_str="< 1 second"
+            fi
+        fi
     fi
     
     if [ $SWE_EXIT_CODE -eq 124 ]; then
-        log "⏰ SWE-Agent timed out after ${TIMEOUT_MINUTES} minutes"
+        log "⏰ SWE-Agent timed out"
         
-        TIMEOUT_MESSAGE="⏰ **SWE-Agent Timeout**
+        # Set action outputs for timeout
+        echo "patch_generated=false" >> $GITHUB_OUTPUT
+        echo "execution_time=${run_duration_str}" >> $GITHUB_OUTPUT
+        echo "patch_content=" >> $GITHUB_OUTPUT
+        
+        TIMEOUT_MESSAGE="⏰ **SWE-Agent Process Exceeded Expected Time**
 
 **Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}  
 **Model:** ${MODEL_NAME}
-**Result:** Timed out after ${TIMEOUT_MINUTES} minutes
+**Result:** Process took longer than expected (actual runtime: ${run_duration_str}).
 
 ## ⏱️ What Happened
-The analysis took longer than expected and was stopped to prevent resource exhaustion.
+The analysis took longer than the configured timeout and was stopped. This is a fallback, and ideally, the agent should manage its own execution time.
 
 ## 🔧 Possible Solutions
 - **Simplify the request** - Break down complex issues into smaller, specific parts
 - **Provide more details** - Help SWE-Agent focus on the core problem with specific examples
-- **Increase timeout** - For complex issues, consider requesting a longer timeout
+- **Check agent configuration** - The agent's internal timeouts or iteration limits might need adjustment for complex tasks.
 - **Try different approach** - Rephrase the issue description to be more specific
 
 ## 💡 Tips for Better Results
@@ -426,7 +458,7 @@ The analysis took longer than expected and was stopped to prevent resource exhau
 Comment \`@swe-agent\` with a more focused request!
 
 ---
-*⏰ SWE-Agent using $MODEL_NAME (timeout: ${TIMEOUT_MINUTES}m)*"
+*⏰ SWE-Agent using $MODEL_NAME (runtime: ${run_duration_str})*"
         
         # Update progress comment with timeout message
         if [ -n "$PROGRESS_COMMENT_ID" ]; then
@@ -440,11 +472,16 @@ Comment \`@swe-agent\` with a more focused request!
     elif [ $SWE_EXIT_CODE -eq 137 ]; then
         log "💀 SWE-Agent was killed (likely due to hanging or resource limits)"
         
+        # Set action outputs for killed process
+        echo "patch_generated=false" >> $GITHUB_OUTPUT
+        echo "execution_time=${run_duration_str}" >> $GITHUB_OUTPUT
+        echo "patch_content=" >> $GITHUB_OUTPUT
+        
         KILLED_MESSAGE="💀 **SWE-Agent Process Terminated**
 
 **Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
 **Model:** ${MODEL_NAME}  
-**Result:** Process was terminated due to hanging or resource limits
+**Result:** Process was terminated (likely due to hanging or resource limits, runtime: ${run_duration_str})
 
 ## ⚠️ What Happened
 The analysis process was terminated because it appeared to be hanging or consuming too many resources.
@@ -467,7 +504,7 @@ The analysis process was terminated because it appeared to be hanging or consumi
 Comment \`@swe-agent\` with a more targeted, specific request!
 
 ---
-*💀 SWE-Agent using $MODEL_NAME*"
+*💀 SWE-Agent using $MODEL_NAME (runtime: ${run_duration_str})*"
         
         # Update progress comment with killed message
         if [ -n "$PROGRESS_COMMENT_ID" ]; then
@@ -480,6 +517,11 @@ Comment \`@swe-agent\` with a more targeted, specific request!
         
     else
         log "❌ SWE-Agent execution failed with exit code: $SWE_EXIT_CODE"
+        
+        # Set action outputs for general failure
+        echo "patch_generated=false" >> $GITHUB_OUTPUT
+        echo "execution_time=${run_duration_str}" >> $GITHUB_OUTPUT
+        echo "patch_content=" >> $GITHUB_OUTPUT
         
         # Show diagnostic information
         log "🔍 Diagnostic Information:"
@@ -517,6 +559,7 @@ $(tail -10 "$OUTPUT_DIR/swe_agent.log" 2>/dev/null || echo "Could not read log f
 **Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
 **Model:** ${MODEL_NAME}
 **Exit Code:** ${SWE_EXIT_CODE}
+**Runtime:** ${run_duration_str}
 
 ## 🚨 What Happened
 I encountered an error while trying to analyze and fix this issue.
@@ -552,7 +595,7 @@ ${LOG_PREVIEW}
 Comment \`@swe-agent\` with additional context or a rephrased request!
 
 ---
-*❌ SWE-Agent using $MODEL_NAME*"
+*❌ SWE-Agent using $MODEL_NAME (runtime: ${run_duration_str})*"
         
         # Update progress comment with failure message
         if [ -n "$PROGRESS_COMMENT_ID" ]; then
