@@ -8,6 +8,8 @@ permissions:
   issues: write
   contents: write
   pull-requests: write
+  actions: write
+  workflows: write
 
 jobs:
   generate-patch:
