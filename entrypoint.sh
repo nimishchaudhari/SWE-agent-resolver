@@ -140,6 +140,16 @@ export GEMINI_API_KEY="${GEMINI_API_KEY}"
 # Gemini also needs GOOGLE_API_KEY for LiteLLM compatibility
 export GOOGLE_API_KEY="${GEMINI_API_KEY}"
 
+# Additional environment variables that some providers might need
+export CLAUDE_API_KEY="${ANTHROPIC_API_KEY}"  # Some configurations use CLAUDE_API_KEY
+export GOOGLE_APPLICATION_CREDENTIALS="${GOOGLE_APPLICATION_CREDENTIALS:-}"  # For service account auth
+
+# Additional LiteLLM compatibility environment variables
+export VERTEX_AI_PROJECT="${VERTEX_AI_PROJECT:-}"
+export VERTEX_AI_LOCATION="${VERTEX_AI_LOCATION:-}"
+export COHERE_API_KEY="${COHERE_API_KEY:-}"
+export REPLICATE_API_TOKEN="${REPLICATE_API_TOKEN:-}"
+
 # Log which API keys are configured (without revealing the actual keys)
 API_KEYS_CONFIGURED=()
 [ -n "$OPENAI_API_KEY" ] && API_KEYS_CONFIGURED+=("OpenAI")
@@ -149,10 +159,7 @@ API_KEYS_CONFIGURED=()
 [ -n "$GEMINI_API_KEY" ] && API_KEYS_CONFIGURED+=("Gemini")
 
 if [ ${#API_KEYS_CONFIGURED[@]} -eq 0 ]; then
-    log "❌ No API keys configured. Please provide at least one API key as a repository secret."
-    post_comment "❌ **Configuration Error**: No API keys configured. Please add at least one API key as a repository secret."
-    add_reaction "confused"
-    exit 1
+    log "⚠️ No API keys detected in environment variables. SWE-Agent will attempt to proceed - LiteLLM may have other authentication methods."
 else
     log "✅ API keys configured for: $(IFS=', '; echo "${API_KEYS_CONFIGURED[*]}")"
 fi
