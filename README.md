@@ -8,8 +8,8 @@ A complete GitHub Action that automatically resolves issues using [SWE-Agent](ht
 - 💬 **Comment-Triggered**: Simply comment `@swe-agent fix this` on any issue
 - 🔧 **Automatic Patch Generation**: Generates code patches to resolve issues
 - 🔄 **Auto Pull Request Creation**: Automatically applies patches and creates PRs
-- 📝 **Real-time Progress Updates**: Posts live updates to GitHub issues
-- ⚡ **Complete Automation**: From analysis to PR creation, fully automated
+- 📝 **Real-time Progress Updates** [TO BE IMPLEMENTED]: Posts live updates to GitHub issues
+- ⚡ **Complete Automation** [The user's comment needs to be detailed enough]: From analysis to PR creation, fully automated
 
 ## 🚀 Quick Setup
 
