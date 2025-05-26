@@ -110,6 +110,7 @@ SWE_AGENT_COMMAND=(
     "--problem_statement.path" "${PROBLEM_FILE_PATH}"  # Corrected from .file_path to .path
     "--env.repo.path" "${TARGET_REPO_CLONE_PATH}"
     "--output_dir" "${TEMP_DIR}" # Use --output_dir instead of --output_patch_file
+    "--env.deployment.type=local" # Force local execution for testing
     # Potentially add: --config config/default.yaml if needed and available
 )
 
