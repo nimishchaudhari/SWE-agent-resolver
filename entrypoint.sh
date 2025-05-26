@@ -19,14 +19,11 @@ TRIGGER_PHRASE="${INPUT_TRIGGER_PHRASE:-@swe-agent}"
 GH_REPO="${GITHUB_REPOSITORY}"
 GH_API_URL="${GITHUB_API_URL:-https://api.github.com}"
 EVENT_PATH="${GITHUB_EVENT_PATH}"
-# SWE_AGENT_ROOT="/app/swe-agent" # No longer needed if installed as a package
-# SWE_AGENT_RUN_SCRIPT="${SWE_AGENT_ROOT}/run.py" # Assuming this is the main script
 
 echo "Trigger Phrase: '${TRIGGER_PHRASE}'"
 echo "Target Repository: '${GH_REPO}'"
 echo "Event Path: '${EVENT_PATH}'"
 echo "Model Name: '${INPUT_MODEL_NAME}'"
-# echo "SWE Agent Script: '${SWE_AGENT_RUN_SCRIPT}'" # Updated below
 
 # --- 1. Parse Event Payload (Focus: issue_comment) ---
 EVENT_TYPE="${GITHUB_EVENT_NAME}"
@@ -59,11 +56,7 @@ if ! echo "$COMMENT_BODY" | grep -Fq "$TRIGGER_PHRASE"; then
 fi
 echo "Trigger phrase found!"
 
-# Extract task description: text after the trigger phrase until end of line or next paragraph
 TASK_DESCRIPTION=$(echo "$COMMENT_BODY" | sed -n "s/.*${TRIGGER_PHRASE}//p" | sed 's/^[ \t]*//;s/[ \t]*$//')
-# A more robust way might be to take everything after the first instance of trigger_phrase on its line
-# TASK_DESCRIPTION=$(echo "$COMMENT_BODY" | awk -v phrase="$TRIGGER_PHRASE" 'BEGIN{found=0} {if(index($0, phrase)) {sub(".*"phrase, ""); print; found=1; next} if(found) print}')
-
 
 if [ -z "$TASK_DESCRIPTION" ]; then
   echo "Warning: Trigger phrase found, but no subsequent text for task description."
@@ -86,9 +79,6 @@ ISSUE_TITLE=$(echo "$ISSUE_DATA_JSON" | jq -r '.title')
 ISSUE_BODY=$(echo "$ISSUE_DATA_JSON" | jq -r '.body') # Might be null
 if [ "$ISSUE_BODY" == "null" ]; then ISSUE_BODY="No description provided for this issue."; fi
 
-# Create the problem description file for SWE-agent
-# This format is an assumption; SWE-agent might expect a specific JSON structure.
-# If so, you'd construct that JSON here instead of a Markdown file.
 cat << EOF > "$PROBLEM_FILE_PATH"
 Issue Title: ${ISSUE_TITLE}
 Issue Number: ${ISSUE_NUMBER}
@@ -110,16 +100,14 @@ echo "Repository cloned."
 
 # --- 5. Run SWE-agent ---
 echo "Preparing to run SWE-agent..."
-# cd "${SWE_AGENT_ROOT}" # No longer needed if sweagent is in PATH
 
-# Construct the SWE-agent command.
 SWE_AGENT_COMMAND=(
-    "python" "-m" "sweagent.run.run" # Use python -m to invoke the module
-    "--model_name" "${INPUT_MODEL_NAME}"
-    "--data_path" "${PROBLEM_FILE_PATH}"
-    "--repo_path" "${TARGET_REPO_CLONE_PATH}"
-    "--output_patch_file" "${SWE_AGENT_OUTPUT_PATCH}"
-    # Add any other necessary default arguments for SWE-agent
+    "python" "-m" "sweagent.run.run" "run"
+    "--agent.model.name" "${INPUT_MODEL_NAME}"
+    "--problem_statement.path" "${PROBLEM_FILE_PATH}"  # Corrected from .file_path to .path
+    "--env.repo.path" "${TARGET_REPO_CLONE_PATH}"
+    "--output_patch_file" "${SWE_AGENT_OUTPUT_PATCH}" # Kept as is, assuming it's valid for the run module
+    # Potentially add: --config config/default.yaml if needed and available
 )
 
 # Append additional user-provided arguments, if any
@@ -130,7 +118,6 @@ fi
 
 echo "Executing SWE-agent command: ${SWE_AGENT_COMMAND[*]}"
 
-# Run SWE-agent and capture its output and exit code
 SWE_AGENT_LOG_FILE="${TEMP_DIR}/swe_agent_run.log"
 AGENT_EXIT_CODE=0
 "${SWE_AGENT_COMMAND[@]}" > "$SWE_AGENT_LOG_FILE" 2>&1 || AGENT_EXIT_CODE=$?
@@ -145,11 +132,10 @@ RESULT_MESSAGE=""
 SUCCESS=false
 
 if [ "$AGENT_EXIT_CODE" -eq 0 ]; then
-    if [ -s "$SWE_AGENT_OUTPUT_PATCH" ]; then # Check if patch file exists and is not empty
+    if [ -s "$SWE_AGENT_OUTPUT_PATCH" ]; then
         echo "Patch file found at '${SWE_AGENT_OUTPUT_PATCH}'."
         PATCH_CONTENT=$(cat "$SWE_AGENT_OUTPUT_PATCH")
-        # GitHub comment length limit is ~65k chars. Truncate if necessary.
-        MAX_PATCH_DISPLAY_LENGTH=60000 
+        MAX_PATCH_DISPLAY_LENGTH=60000
         if [ ${#PATCH_CONTENT} -gt $MAX_PATCH_DISPLAY_LENGTH ]; then
             PATCH_CONTENT_DISPLAY="$(echo "$PATCH_CONTENT" | head -c $MAX_PATCH_DISPLAY_LENGTH)\n\n... (patch truncated)"
         else
@@ -160,16 +146,15 @@ if [ "$AGENT_EXIT_CODE" -eq 0 ]; then
     else
         echo "SWE-agent completed successfully, but no patch file was found or it was empty at '${SWE_AGENT_OUTPUT_PATCH}'."
         RESULT_MESSAGE="✅ SWE-agent completed successfully, but did not produce a patch file. See logs for details.\n\n"
-        SUCCESS=true # Still a success in terms of agent execution
+        SUCCESS=true
     fi
 else
     echo "SWE-agent failed with exit code ${AGENT_EXIT_CODE}."
     RESULT_MESSAGE="❌ SWE-agent encountered an error (exit code: ${AGENT_EXIT_CODE}). Please see the logs below for details.\n\n"
 fi
 
-# Append logs to the result message
 LOG_CONTENT=$(cat "$SWE_AGENT_LOG_FILE")
-MAX_LOG_DISPLAY_LENGTH=30000 # Keep total comment size in mind
+MAX_LOG_DISPLAY_LENGTH=30000
 if [ ${#LOG_CONTENT} -gt $MAX_LOG_DISPLAY_LENGTH ]; then
     LOG_CONTENT_DISPLAY="$(echo "$LOG_CONTENT" | head -c $MAX_LOG_DISPLAY_LENGTH)\n\n... (log truncated)"
 else
@@ -194,10 +179,9 @@ else
   echo "Error posting comment. GitHub API responded with ${RESPONSE_CODE}."
   echo "Response body:"
   cat "${TEMP_DIR}/curl_response.txt"
-  # Fallback: output the result message to action log if GitHub comment fails
   echo "Intended comment message was:"
   echo "$RESULT_MESSAGE"
-  exit 1 # Indicate failure to post comment
+  exit 1
 fi
 
 # --- 7. Cleanup ---
@@ -208,5 +192,5 @@ echo "SWE-Agent Resolver Action :: Finished."
 if [ "$SUCCESS" = true ] && [ "$AGENT_EXIT_CODE" -eq 0 ]; then
     exit 0
 else
-    exit 1 # Indicate some part of the process failed
+    exit 1
 fi
