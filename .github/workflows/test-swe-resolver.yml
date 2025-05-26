@@ -19,6 +19,6 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           llm_api_key: ${{ secrets.OPENAI_API_KEY }}
-          model_name: 'gpt-4-turbo'
+          model_name: 'gpt-4o'
           # trigger_phrase: '@swe-agent' # Optional
           # swe_agent_args: ''           # Optional
