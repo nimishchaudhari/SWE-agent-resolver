@@ -1,104 +1,155 @@
 #!/bin/bash
 
-set -e # Exit immediately if a command exits with a non-zero status.
-set -o pipefail # Causes a pipeline to return the exit status of the last command in the pipe that failed.
+set -e
+
+# --- Configuration ---
+GITHUB_TOKEN="${INPUT_GITHUB_TOKEN}"
+TRIGGER_PHRASE="${INPUT_TRIGGER_PHRASE}"
+LLM_API_KEY="${INPUT_LLM_API_KEY}"
+MODEL_NAME="${INPUT_MODEL_NAME}"
+TIMEOUT_MINUTES="${INPUT_TIMEOUT_MINUTES:-30}"
 
 # --- Utility Functions ---
 log() {
-    echo "[$(date +'%Y-%m-%d %H:%M:%S UTC')] $*"
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"
 }
 
-post_github_comment() {
+post_comment() {
     local message="$1"
-    local repo="$2"
-    local issue_number="$3"
-    local token="$4"
-    
     local json_payload=$(jq -n --arg body "$message" '{body: $body}')
-    local comment_url="${GITHUB_API_URL:-https://api.github.com}/repos/${repo}/issues/${issue_number}/comments"
     
-    local response_code=$(curl -s -w "%{http_code}" -X POST \
-        -H "Authorization: token ${token}" \
+    curl -s -X POST \
+        -H "Authorization: token ${GITHUB_TOKEN}" \
         -H "Accept: application/vnd.github.v3+json" \
-        "$comment_url" \
-        -d "$json_payload" -o /tmp/curl_response.txt)
-    
-    if [ "$response_code" -ge 200 ] && [ "$response_code" -lt 300 ]; then
-        log "✅ Successfully posted comment to GitHub"
-        return 0
-    else
-        log "❌ Failed to post comment. Response code: $response_code"
-        cat /tmp/curl_response.txt
-        return 1
-    fi
+        "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" \
+        -d "$json_payload" > /dev/null
 }
 
 add_reaction() {
     local reaction="$1"
-    local repo="$2"
-    local comment_id="$3"
-    local token="$4"
-    
-    local json_payload=$(jq -n --arg content "$reaction" '{content: $content}')
-    local reaction_url="${GITHUB_API_URL:-https://api.github.com}/repos/${repo}/issues/comments/${comment_id}/reactions"
     
     curl -s -X POST \
-        -H "Authorization: token ${token}" \
+        -H "Authorization: token ${GITHUB_TOKEN}" \
         -H "Accept: application/vnd.github.v3+json" \
-        "$reaction_url" \
-        -d "$json_payload" > /dev/null
+        "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/comments/${COMMENT_ID}/reactions" \
+        -d "{\"content\": \"$reaction\"}" > /dev/null
 }
 
-create_pull_request() {
-    local repo="$1"
-    local token="$2"
-    local patch_content="$3"
-    local issue_number="$4"
-    local issue_title="$5"
-    local user_login="$6"
-    local base_branch="$7"
-    local repo_path="$8"
+# --- Main Execution ---
+log "🚀 SWE-Agent Issue Resolver started"
+
+# Parse GitHub event
+EVENT_PATH="${GITHUB_EVENT_PATH}"
+if [ ! -f "$EVENT_PATH" ]; then
+    log "❌ GitHub event file not found"
+    exit 1
+fi
+
+# Extract comment details
+COMMENT_BODY=$(jq -r '.comment.body' "$EVENT_PATH")
+COMMENT_ID=$(jq -r '.comment.id' "$EVENT_PATH")
+ISSUE_NUMBER=$(jq -r '.issue.number' "$EVENT_PATH")
+ISSUE_TITLE=$(jq -r '.issue.title' "$EVENT_PATH")
+REPO_URL=$(jq -r '.repository.clone_url' "$EVENT_PATH")
+
+# Check if comment contains trigger phrase
+if [[ "$COMMENT_BODY" != *"$TRIGGER_PHRASE"* ]]; then
+    log "🔍 Comment doesn't contain trigger phrase '$TRIGGER_PHRASE'"
+    exit 0
+fi
+
+log "✅ Trigger phrase found. Processing issue #$ISSUE_NUMBER"
+
+# Add eyes reaction to show we're processing
+add_reaction "eyes"
+
+# Clone repository
+REPO_DIR="/tmp/repo"
+log "📥 Cloning repository..."
+if ! git clone "$REPO_URL" "$REPO_DIR"; then
+    log "❌ Failed to clone repository"
+    post_comment "❌ Failed to clone repository. Please check permissions."
+    add_reaction "thumbsdown"
+    exit 1
+fi
+
+cd "$REPO_DIR"
+
+# Run SWE-Agent
+log "🤖 Running SWE-Agent..."
+export OPENAI_API_KEY="$LLM_API_KEY"
+export ANTHROPIC_API_KEY="$LLM_API_KEY"
+
+SWE_OUTPUT_DIR="/tmp/swe_output"
+mkdir -p "$SWE_OUTPUT_DIR"
+
+timeout "${TIMEOUT_MINUTES}m" python -m sweagent.agent.run \
+    --model_name "$MODEL_NAME" \
+    --data_path "$REPO_DIR" \
+    --config_file /app/swe-agent/config_files/default_from_url.yaml \
+    --per_instance_cost_limit 2.0 \
+    --apply_patch_locally \
+    --instance_filter ".*" > "$SWE_OUTPUT_DIR/output.log" 2>&1
+
+if [ $? -eq 0 ]; then
+    log "✅ SWE-Agent completed successfully"
     
-    log "🔄 Creating pull request..."
-    
-    # Create a unique branch name
-    local timestamp=$(date +%s)
-    local branch_name="swe-agent-fix-${issue_number}-${timestamp}"
-    
-    cd "$repo_path"
-    
-    # Configure git user
-    git config user.email "swe-agent[bot]@users.noreply.github.com"
-    git config user.name "SWE-Agent[bot]"
-    
-    # Create and switch to new branch
-    git checkout -b "$branch_name" 2>/dev/null || {
-        log "❌ Failed to create branch $branch_name"
-        return 1
-    }
-    
-    # Apply the patch
-    echo "$patch_content" > /tmp/swe_agent_patch.patch
-    if git apply /tmp/swe_agent_patch.patch 2>/dev/null; then
-        log "✅ Patch applied successfully"
-    else
-        log "❌ Failed to apply patch, trying with git am"
-        if ! git am < /tmp/swe_agent_patch.patch 2>/dev/null; then
-            log "❌ Failed to apply patch with git am too"
-            return 1
-        fi
+    # Look for generated patches
+    PATCH_FILE=$(find "$SWE_OUTPUT_DIR" -name "*.patch" | head -1)
+    if [ -z "$PATCH_FILE" ]; then
+        PATCH_FILE=$(find "$REPO_DIR" -name "*.patch" | head -1)
     fi
     
-    # Stage and commit changes
-    git add -A
-    git commit -m "Fix: ${issue_title}" -m "Resolves #${issue_number}" -m "Generated by SWE-Agent" || {
-        log "❌ Failed to commit changes"
-        return 1
-    }
+    if [ -n "$PATCH_FILE" ] && [ -f "$PATCH_FILE" ]; then
+        log "📄 Found patch file: $PATCH_FILE"
+        PATCH_CONTENT=$(cat "$PATCH_FILE")
+        
+        # Truncate if too long
+        if [ ${#PATCH_CONTENT} -gt 10000 ]; then
+            PATCH_CONTENT="${PATCH_CONTENT:0:10000}
+...
+(Patch truncated - too long for comment)"
+        fi
+        
+        MESSAGE="✅ **Solution Generated Successfully!**
+
+## 🔧 Generated Patch
+\`\`\`diff
+$PATCH_CONTENT
+\`\`\`
+
+## 📝 Next Steps
+1. Review the proposed changes carefully
+2. Test the solution in your development environment  
+3. Apply the patch manually if it looks good
+
+*Generated by SWE-Agent using $MODEL_NAME*"
+        
+        post_comment "$MESSAGE"
+        add_reaction "thumbsup"
+    else
+        log "⚠️ No patch file found"
+        post_comment "✅ SWE-Agent completed analysis but didn't generate a patch. Check the logs for details."
+        add_reaction "confused"
+    fi
+else
+    log "❌ SWE-Agent failed"
+    ERROR_LOG=$(tail -20 "$SWE_OUTPUT_DIR/output.log" 2>/dev/null || echo "No error log available")
     
-    # Push to remote
-    git push origin "$branch_name" 2>/dev/null || {
-        log "❌ Failed to push branch to remote"
+    MESSAGE="❌ **SWE-Agent execution failed**
+
+## Error Details
+\`\`\`
+$ERROR_LOG
+\`\`\`
+
+Please check the issue description and try again."
+    
+    post_comment "$MESSAGE"
+    add_reaction "confused"
+fi
+
+log "🏁 SWE-Agent Issue Resolver finished"
         return 1
     }
     

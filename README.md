@@ -1,34 +1,116 @@
-<p align="center">
-  <a href="https://swe-agent.com/latest/">
-    <img src="assets/swe-agent-banner.png" alt="swe-agent.com" style="height: 12em" />
-  </a>
-</p>
+# SWE-Agent GitHub Actions Resolver
 
-<p align="center">
-  <a href="https://swe-agent.com/latest/"><strong>Documentation</strong></a>&nbsp; | &nbsp;
-  <a href="https://discord.gg/AVEFbBn2rH"><strong>Discord</strong></a>&nbsp; | &nbsp;
-  <a href="https://arxiv.org/abs/2405.15793"><strong>Paper</strong></a>
-</p>
+A simple GitHub Action that automatically resolves issues using [SWE-Agent](https://github.com/SWE-agent/SWE-agent) - an AI-powered autonomous software engineer.
 
+## ✨ Features
 
-SWE-agent enables your language model of choice (e.g. GPT-4o or Claude Sonnet 3.7) to autonomously use tools to
-[fix issues in real GitHub repositories](https://swe-agent.com/latest/usage/hello_world),
-[find cybersecurity vulnerabilities](https://enigma-agent.com/), or
-[perform any custom task](https://swe-agent.com/latest/usage/coding_challenges).
+- 🤖 **AI-Powered Issue Resolution**: Uses SWE-Agent with models like GPT-4o or Claude
+- 💬 **Comment-Triggered**: Simply comment `@swe-agent fix this` on any issue
+- 🔧 **Automatic Patch Generation**: Generates code patches to resolve issues
+- 📝 **Clear Communication**: Posts results directly to GitHub issues
+- ⚡ **Simple Setup**: Just add the action to your repository
 
-* ✅ **State of the art** on SWE-bench among open-source projects
-* ✅ **Free-flowing & generalizable**: Leaves maximal agency to the LM
-* ✅ **Configurable & fully documented**: Governed by a single `yaml` file
-* ✅ **Made for research**: Simple & hackable by design
+## 🚀 Quick Setup
 
-SWE-agent is built and maintained by researchers from Princeton University and Stanford University.
+1. **Add the workflow file** to your repository at `.github/workflows/swe-resolver.yml`:
 
-## 📣 News
+```yaml
+name: SWE-Agent Issue Resolver
 
-* May 2: [SWE-agent-LM-32b](https://swesmith.com) achieves open-weights SOTA on SWE-bench
-* Feb 28: [SWE-agent 1.0 + Claude 3.7 is SoTA on SWE-Bench full](https://x.com/KLieret/status/1895487966409298067)
-* Feb 25: [SWE-agent 1.0 + Claude 3.7 is SoTA on SWE-bench verified](https://x.com/KLieret/status/1894408819670733158)
-* Feb 13: [Releasing SWE-agent 1.0: SoTA on SWE-bench light & tons of new features](https://x.com/KLieret/status/1890048205448220849)
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  resolve_issue:
+    name: Resolve Issue with SWE-Agent
+    runs-on: ubuntu-latest
+    if: |
+      github.event.comment.user.login != 'github-actions[bot]' &&
+      contains(github.event.comment.body, '@swe-agent')
+    
+    steps:
+      - name: Run SWE-Agent Resolver
+        uses: nimishchaudhari/SWE-agent-resolver@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          llm_api_key: ${{ secrets.OPENAI_API_KEY }}
+          model_name: 'gpt-4o'
+```
+
+2. **Add your OpenAI API key** as a repository secret named `OPENAI_API_KEY`
+
+3. **That's it!** Comment `@swe-agent fix this issue` on any issue to trigger the resolver
+
+## 🎯 Usage
+
+Simply comment on any GitHub issue with the trigger phrase:
+
+```
+@swe-agent fix this bug
+@swe-agent solve this problem
+@swe-agent help with this issue
+```
+
+The action will:
+1. 👀 React with eyes to show it's processing
+2. 🤖 Run SWE-Agent to analyze and fix the issue
+3. 📄 Post the generated patch as a comment
+4. ✅ React with thumbs up on success or 😕 on failure
+
+## ⚙️ Configuration
+
+### Inputs
+
+| Input | Description | Required | Default |
+|-------|-------------|----------|---------|
+| `github_token` | GitHub token for API access | Yes | `${{ github.token }}` |
+| `llm_api_key` | OpenAI/Anthropic API key | Yes | - |
+| `trigger_phrase` | Phrase that triggers the agent | No | `@swe-agent` |
+| `model_name` | AI model to use | No | `gpt-4o` |
+| `timeout_minutes` | Max execution time | No | `30` |
+
+### Supported Models
+
+- `gpt-4o` (OpenAI GPT-4 Omni)
+- `gpt-4-turbo` (OpenAI GPT-4 Turbo)
+- `claude-3.5-sonnet` (Anthropic Claude)
+
+## 🔒 Security
+
+- Only processes comments containing the trigger phrase
+- Uses repository's default permissions
+- API keys are stored securely as GitHub secrets
+- No data is sent to external services except the chosen AI provider
+
+## 📝 Example
+
+1. **Create an issue** describing a bug or feature request
+2. **Comment** `@swe-agent fix this` on the issue
+3. **Wait** for SWE-Agent to analyze and generate a solution
+4. **Review** the generated patch in the comment
+5. **Apply** the patch to your codebase if it looks good
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [SWE-Agent](https://github.com/SWE-agent/SWE-agent) - The autonomous software engineer
+- Built for the GitHub Actions community
+
+---
+
+**Note**: This action requires an OpenAI or Anthropic API key. Usage costs depend on the model and complexity of issues being resolved.
 * Dec 7: [An interview with the SWE-agent & SWE-bench team](https://www.youtube.com/watch?v=fcr8WzeEXyk)
 
 ## 🚀 Get started!

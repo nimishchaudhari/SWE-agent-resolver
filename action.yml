@@ -18,34 +18,10 @@ inputs:
     description: 'AI model to use (e.g., gpt-4o, claude-3.5-sonnet, gpt-4-turbo)'
     required: false
     default: 'gpt-4o'
-  swe_agent_args:
-    description: 'Additional arguments to pass to SWE-agent'
-    required: false
-    default: ''
   timeout_minutes:
     description: 'Maximum time in minutes to run SWE-agent (default: 30)'
     required: false
     default: '30'
-  max_patch_size:
-    description: 'Maximum patch size to display in comments (characters)'
-    required: false
-    default: '50000'
-  auto_pr:
-    description: 'Automatically create pull requests for code fixes (true/false)'
-    required: false
-    default: 'true'
-  pr_target_branch:
-    description: 'Target branch for pull requests (default: main)'
-    required: false
-    default: 'main'
-  analysis_only_keywords:
-    description: 'Keywords that indicate analysis-only requests (comma-separated)'
-    required: false
-    default: 'analyze,review,opinion,explain,help,question,discuss,thoughts'
-  force_patch_keywords:
-    description: 'Keywords that force patch generation (comma-separated)'
-    required: false
-    default: 'fix,solve,implement,create,build,patch,code'
 
 runs:
   using: 'docker'
