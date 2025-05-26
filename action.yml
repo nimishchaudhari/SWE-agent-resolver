@@ -1,39 +1,56 @@
-name: 'SWE-Agent Issue Resolver Action'
-description: 'Triggers SWE-agent to attempt to fix a GitHub issue based on a comment.'
-author: 'nimishchaudhari' # (nimishchaudhari - 2025-05-26)
+name: 'SWE-Agent Issue Resolver'
+description: 'Automatically resolves GitHub issues using SWE-Agent with AI assistance'
+author: 'nimishchaudhari'
 
 inputs:
   github_token:
-    description: 'GitHub token to interact with the repository (e.g., post comments, read issue data).'
+    description: 'GitHub token for repository access and comment posting'
     required: true
     default: ${{ github.token }}
   trigger_phrase:
-    description: 'The phrase in comments to trigger the agent (e.g., "@swe-agent fix this"). The text after this phrase will be used as part of the problem description.'
+    description: 'Comment phrase that triggers the agent (e.g., "@swe-agent fix this")'
     required: false
     default: '@swe-agent'
   llm_api_key:
-    description: 'API key for the LLM used by SWE-agent (e.g., OpenAI API Key). Store as a repository secret.'
+    description: 'API key for the LLM (OpenAI, Anthropic, etc.). Store as repository secret.'
     required: true
   model_name:
-    description: 'The model name to be used by SWE-agent (e.g., gpt-4-turbo, claude-3-opus-20240229).'
+    description: 'AI model to use (e.g., gpt-4o, claude-3.5-sonnet, gpt-4-turbo)'
     required: false
-    default: 'gpt-4o' # A sensible default
+    default: 'gpt-4o'
   swe_agent_args:
-    description: 'Optional additional arguments to pass directly to the SWE-agent run.py script.'
+    description: 'Additional arguments to pass to SWE-agent'
     required: false
     default: ''
-  # Example: If SWE-agent needs a specific config file that can be part of your action or the target repo
-  # swe_agent_config_file:
-  #   description: 'Path to a specific SWE-agent configuration file (if needed beyond CLI args).'
-  #   required: false
-  #   default: ''
+  timeout_minutes:
+    description: 'Maximum time in minutes to run SWE-agent (default: 30)'
+    required: false
+    default: '30'
+  max_patch_size:
+    description: 'Maximum patch size to display in comments (characters)'
+    required: false
+    default: '50000'
+  auto_pr:
+    description: 'Automatically create pull requests for code fixes (true/false)'
+    required: false
+    default: 'true'
+  pr_target_branch:
+    description: 'Target branch for pull requests (default: main)'
+    required: false
+    default: 'main'
+  analysis_only_keywords:
+    description: 'Keywords that indicate analysis-only requests (comma-separated)'
+    required: false
+    default: 'analyze,review,opinion,explain,help,question,discuss,thoughts'
+  force_patch_keywords:
+    description: 'Keywords that force patch generation (comma-separated)'
+    required: false
+    default: 'fix,solve,implement,create,build,patch,code'
 
 runs:
   using: 'docker'
   image: 'Dockerfile'
-  # Environment variables for entrypoint.sh are derived from inputs automatically:
-  # INPUT_GITHUB_TOKEN, INPUT_TRIGGER_PHRASE, INPUT_LLM_API_KEY, INPUT_MODEL_NAME, INPUT_SWE_AGENT_ARGS
 
 branding:
-  icon: 'zap' # Changed icon
-  color: 'green'
+  icon: 'cpu'
+  color: 'blue'
