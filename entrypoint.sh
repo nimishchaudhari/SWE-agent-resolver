@@ -83,13 +83,26 @@ export ANTHROPIC_API_KEY="$LLM_API_KEY"
 SWE_OUTPUT_DIR="/tmp/swe_output"
 mkdir -p "$SWE_OUTPUT_DIR"
 
-timeout "${TIMEOUT_MINUTES}m" python -m sweagent.agent.run \
-    --model_name "$MODEL_NAME" \
-    --data_path "$REPO_DIR" \
-    --config_file /app/swe-agent/config_files/default_from_url.yaml \
-    --per_instance_cost_limit 2.0 \
-    --apply_patch_locally \
-    --instance_filter ".*" > "$SWE_OUTPUT_DIR/output.log" 2>&1
+# Create problem statement file
+PROBLEM_STATEMENT_FILE="$SWE_OUTPUT_DIR/problem_statement.md"
+cat > "$PROBLEM_STATEMENT_FILE" << EOF
+# Issue: $ISSUE_TITLE
+
+## Problem Description
+$ISSUE_TITLE
+
+## Task
+Please analyze and fix this issue in the repository.
+EOF
+
+# Use the new SWE-Agent v1.0+ command format
+timeout "${TIMEOUT_MINUTES}m" sweagent run \
+    --config /app/swe-agent/config/default.yaml \
+    --agent.model.name "$MODEL_NAME" \
+    --agent.model.per_instance_cost_limit 2.0 \
+    --env.repo.path "$REPO_DIR" \
+    --problem_statement.path "$PROBLEM_STATEMENT_FILE" \
+    --output_dir "$SWE_OUTPUT_DIR" > "$SWE_OUTPUT_DIR/output.log" 2>&1
 
 if [ $? -eq 0 ]; then
     log "✅ SWE-Agent completed successfully"
