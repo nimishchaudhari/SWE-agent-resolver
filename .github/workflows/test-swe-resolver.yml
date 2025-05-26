@@ -128,9 +128,9 @@ Execution Time: ${EXECUTION_TIME}"
 **Execution Time:** ${EXECUTION_TIME}
 
 ## 🔧 Generated Patch
-\\\`\\\`\\\`diff
+\`\`\`diff
 ${PATCH_CONTENT}
-\\\`\\\`\\\`
+\`\`\`
 
 ## 📝 Next Steps
 1. **Review** the changes in this PR
@@ -162,9 +162,9 @@ ${PATCH_CONTENT}
 **Pull Request:** [View PR](${PR_URL})
 
 ## 🔧 Generated Patch
-\\\`\\\`\\\`diff
+\`\`\`diff
 ${PATCH_CONTENT}
-\\\`\\\`\\\`
+\`\`\`
 
 ## 📝 Next Steps
 1. **Review** the Pull Request: [${PR_TITLE}](${PR_URL})
@@ -187,17 +187,17 @@ ${PATCH_CONTENT}
 **Model:** ${MODEL_NAME}
 **Execution Time:** ${EXECUTION_TIME}
 
-The generated patch did not pass the \\\`git apply --check\\\` step. This may indicate conflicts or outdated file references. Please review and apply manually.
+The generated patch did not pass the \`git apply --check\` step. This may indicate conflicts or outdated file references. Please review and apply manually.
 
 ## 🔧 Generated Patch (Manual Application Required)
-\\\`\\\`\\\`diff
+\`\`\`diff
 ${PATCH_CONTENT}
-\\\`\\\`\\\`
+\`\`\`
 
 ## 📝 Manual Steps
 1. Copy the patch above
-2. Save it to a file (e.g., \\\`fix.patch\\\`)
-3. Try \\\`git apply fix.patch\\\` or apply changes manually
+2. Save it to a file (e.g., \`fix.patch\`)
+3. Try \`git apply fix.patch\` or apply changes manually
 4. Create a PR with the changes
 
 ---
