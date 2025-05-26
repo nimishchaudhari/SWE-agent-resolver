@@ -165,6 +165,68 @@ $COMMENT_BODY
 Please analyze and fix this issue in the repository.
 EOF
 
+# --- Diagnostic Checks ---
+log "🔍 Checking for sweagent command..."
+SWEAGENT_PATH=$(command -v sweagent)
+if [ -z "$SWEAGENT_PATH" ] || ! command -v sweagent > /dev/null 2>&1; then
+    log "❌ Critical Error: sweagent command not found in PATH."
+    ERROR_MESSAGE="❌ Critical Error: \`sweagent\` command not found. Please check the Docker image setup or SWE-Agent installation."
+    if [ -n "$PROGRESS_COMMENT_ID" ]; then
+        update_comment "$PROGRESS_COMMENT_ID" "$ERROR_MESSAGE"
+    else
+        post_comment "$ERROR_MESSAGE"
+    fi
+    add_reaction "confused"
+    exit 1
+else
+    log "✅ sweagent command found at: $SWEAGENT_PATH"
+fi
+
+if [ -r "/app/swe-agent/config/default.yaml" ]; then
+    log "📄 Config file /app/swe-agent/config/default.yaml found and readable."
+else
+    log "⚠️ Config file /app/swe-agent/config/default.yaml not found or not readable."
+fi
+
+log "🩺 Attempting 'sweagent --version'..."
+SWEAGENT_VERSION_OUTPUT_FILE="$TEMP_DIR/sweagent_version_output.log"
+if sweagent --version > "$SWEAGENT_VERSION_OUTPUT_FILE" 2>&1; then
+    log "✅ 'sweagent --version' succeeded."
+    if [ -s "$SWEAGENT_VERSION_OUTPUT_FILE" ]; then
+        log "📋 Version command output:"
+        cat "$SWEAGENT_VERSION_OUTPUT_FILE" | while IFS= read -r line; do log "  $line"; done
+    else
+        log "ℹ️ 'sweagent --version' produced no output, but exited successfully."
+    fi
+else
+    VERSION_EXIT_CODE=$?
+    log "❌ 'sweagent --version' failed with exit code $VERSION_EXIT_CODE."
+    VERSION_OUTPUT_ON_FAILURE=""
+    if [ -s "$SWEAGENT_VERSION_OUTPUT_FILE" ]; then
+        log "📋 Version command output on failure:"
+        cat "$SWEAGENT_VERSION_OUTPUT_FILE" | while IFS= read -r line; do log "  $line"; done
+        VERSION_OUTPUT_ON_FAILURE=$(cat "$SWEAGENT_VERSION_OUTPUT_FILE")
+    else
+        log "⚠️ 'sweagent --version' failed with no output."
+        VERSION_OUTPUT_ON_FAILURE="No output captured."
+    fi
+    
+    ERROR_MESSAGE="❌ Critical Error: \`sweagent --version\` failed with exit code ${VERSION_EXIT_CODE}. SWE-Agent may not be installed correctly.
+
+Output:
+\`\`\`
+${VERSION_OUTPUT_ON_FAILURE}
+\`\`\`"
+    if [ -n "$PROGRESS_COMMENT_ID" ]; then
+        update_comment "$PROGRESS_COMMENT_ID" "$ERROR_MESSAGE"
+    else
+        post_comment "$ERROR_MESSAGE"
+    fi
+    add_reaction "confused"
+    exit 1
+fi
+# --- End Diagnostic Checks ---
+
 log "🤖 Running SWE-Agent with model: $MODEL_NAME"
 
 # Validate timeout (minimum 5 minutes for SWE-Agent to work effectively)
