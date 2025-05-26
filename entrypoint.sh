@@ -19,14 +19,14 @@ TRIGGER_PHRASE="${INPUT_TRIGGER_PHRASE:-@swe-agent}"
 GH_REPO="${GITHUB_REPOSITORY}"
 GH_API_URL="${GITHUB_API_URL:-https://api.github.com}"
 EVENT_PATH="${GITHUB_EVENT_PATH}"
-SWE_AGENT_ROOT="/app/swe-agent"
-SWE_AGENT_RUN_SCRIPT="${SWE_AGENT_ROOT}/run.py" # Assuming this is the main script
+# SWE_AGENT_ROOT="/app/swe-agent" # No longer needed if installed as a package
+# SWE_AGENT_RUN_SCRIPT="${SWE_AGENT_ROOT}/run.py" # Assuming this is the main script
 
 echo "Trigger Phrase: '${TRIGGER_PHRASE}'"
 echo "Target Repository: '${GH_REPO}'"
 echo "Event Path: '${EVENT_PATH}'"
 echo "Model Name: '${INPUT_MODEL_NAME}'"
-echo "SWE Agent Script: '${SWE_AGENT_RUN_SCRIPT}'"
+# echo "SWE Agent Script: '${SWE_AGENT_RUN_SCRIPT}'" # Updated below
 
 # --- 1. Parse Event Payload (Focus: issue_comment) ---
 EVENT_TYPE="${GITHUB_EVENT_NAME}"
@@ -110,20 +110,16 @@ echo "Repository cloned."
 
 # --- 5. Run SWE-agent ---
 echo "Preparing to run SWE-agent..."
-cd "${SWE_AGENT_ROOT}" # SWE-agent scripts might expect to be run from their own directory
+# cd "${SWE_AGENT_ROOT}" # No longer needed if sweagent is in PATH
 
-# Construct the SWE-agent command. This is the MOST CRITICAL part and highly dependent on SWE-agent's actual CLI.
-# The example arguments below are educated guesses.
-# You MUST verify these against SWE-agent's documentation or by testing its run.py script.
+# Construct the SWE-agent command.
 SWE_AGENT_COMMAND=(
-    "python" "${SWE_AGENT_RUN_SCRIPT}"
+    "sweagent" # Use the installed script name
     "--model_name" "${INPUT_MODEL_NAME}"
-    "--data_path" "${PROBLEM_FILE_PATH}" # Assuming it takes the problem description file
-    "--repo_path" "${TARGET_REPO_CLONE_PATH}" # Path to the cloned code SWE-agent should modify
-    "--output_patch_file" "${SWE_AGENT_OUTPUT_PATCH}" # Assuming it can output a patch to a specified file
+    "--data_path" "${PROBLEM_FILE_PATH}"
+    "--repo_path" "${TARGET_REPO_CLONE_PATH}"
+    "--output_patch_file" "${SWE_AGENT_OUTPUT_PATCH}"
     # Add any other necessary default arguments for SWE-agent
-    # For example, if it has a default config:
-    # "--config_file" "${SWE_AGENT_ROOT}/configs/default_config.yaml"
 )
 
 # Append additional user-provided arguments, if any
