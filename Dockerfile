@@ -1,5 +1,5 @@
 # Start from a Python base image (e.g., Python 3.10 or 3.11, check SWE-agent compatibility)
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 # Install git, jq (for parsing GitHub event JSON), curl (for GitHub API calls if needed directly)
 # and other common utilities that might be useful.
