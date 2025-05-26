@@ -25,6 +25,24 @@ RUN ls -la /app/swe-agent # Debug: List contents of the cloned directory
 # Install SWE-agent from the cloned source
 RUN cd /app/swe-agent && pip install . && cd /app
 
+# Workaround for swe-agent apparently looking for config in /usr/local/lib/python3.12/site-packages/config
+# This will try to symlink the installed package's config directory.
+# If that doesn't exist, it copies from the original source code.
+RUN PKG_CONFIG_DIR="/usr/local/lib/python3.12/site-packages/sweagent/config" && \\
+    TARGET_CONFIG_DIR="/usr/local/lib/python3.12/site-packages/config" && \\
+    SRC_CONFIG_DIR="/app/swe-agent/sweagent/config" && \\
+    echo "Applying workaround for swe-agent config path issue..." && \\
+    if [ -d "$PKG_CONFIG_DIR" ]; then \\
+      echo "Found $PKG_CONFIG_DIR, creating symlink: $TARGET_CONFIG_DIR -> $PKG_CONFIG_DIR"; \\
+      ln -sfn "$PKG_CONFIG_DIR" "$TARGET_CONFIG_DIR"; \\
+    elif [ -d "$SRC_CONFIG_DIR" ]; then \\
+      echo "Package config dir $PKG_CONFIG_DIR not found. Copying from $SRC_CONFIG_DIR to $TARGET_CONFIG_DIR"; \\
+      mkdir -p "$TARGET_CONFIG_DIR" && cp -r "$SRC_CONFIG_DIR"/* "$TARGET_CONFIG_DIR/"; \\
+    else \\
+      echo "Warning: Config source directory not found for workaround ($PKG_CONFIG_DIR or $SRC_CONFIG_DIR). Creating empty $TARGET_CONFIG_DIR."; \\
+      mkdir -p "$TARGET_CONFIG_DIR"; \\
+    fi
+
 # Install SWE-agent dependencies.
 # Ensure requirements.txt is at the root of SWE-agent or adjust path.
 # Some agents require specific versions of torch, etc. This might need adjustment
