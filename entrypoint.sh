@@ -131,46 +131,30 @@ if [ -z "$PROGRESS_COMMENT_ID" ]; then
 fi
 
 # Set up API keys for SWE-Agent
-# Support multiple API providers - LiteLLM will handle the routing based on model prefix
-if [ -n "$OPENAI_API_KEY" ]; then
-    export OPENAI_API_KEY="$OPENAI_API_KEY"
-    log "✅ OpenAI API key configured"
-elif [ -n "$LLM_API_KEY" ]; then
-    export OPENAI_API_KEY="$LLM_API_KEY"
-    log "✅ OpenAI API key configured (fallback from LLM_API_KEY)"
-fi
+# Export all API keys to environment - LiteLLM will automatically pick the right one based on model name
+export OPENAI_API_KEY="${OPENAI_API_KEY:-${LLM_API_KEY}}"
+export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-${LLM_API_KEY}}"
+export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY}"
+export OPENROUTER_API_KEY="${OPENROUTER_API_KEY}"
+export GEMINI_API_KEY="${GEMINI_API_KEY}"
+# Gemini also needs GOOGLE_API_KEY for LiteLLM compatibility
+export GOOGLE_API_KEY="${GEMINI_API_KEY}"
 
-if [ -n "$ANTHROPIC_API_KEY" ]; then
-    export ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
-    log "✅ Anthropic API key configured"
-elif [ -n "$LLM_API_KEY" ]; then
-    export ANTHROPIC_API_KEY="$LLM_API_KEY"
-    log "✅ Anthropic API key configured (fallback from LLM_API_KEY)"
-fi
+# Log which API keys are configured (without revealing the actual keys)
+API_KEYS_CONFIGURED=()
+[ -n "$OPENAI_API_KEY" ] && API_KEYS_CONFIGURED+=("OpenAI")
+[ -n "$ANTHROPIC_API_KEY" ] && API_KEYS_CONFIGURED+=("Anthropic") 
+[ -n "$DEEPSEEK_API_KEY" ] && API_KEYS_CONFIGURED+=("DeepSeek")
+[ -n "$OPENROUTER_API_KEY" ] && API_KEYS_CONFIGURED+=("OpenRouter")
+[ -n "$GEMINI_API_KEY" ] && API_KEYS_CONFIGURED+=("Gemini")
 
-if [ -n "$DEEPSEEK_API_KEY" ]; then
-    export DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY"
-    log "✅ DeepSeek API key configured"
-fi
-
-if [ -n "$OPENROUTER_API_KEY" ]; then
-    export OPENROUTER_API_KEY="$OPENROUTER_API_KEY"
-    log "✅ OpenRouter API key configured"
-fi
-
-if [ -n "$GEMINI_API_KEY" ]; then
-    export GEMINI_API_KEY="$GEMINI_API_KEY"
-    # Gemini requires the GOOGLE_API_KEY environment variable for LiteLLM
-    export GOOGLE_API_KEY="$GEMINI_API_KEY"
-    log "✅ Gemini API key configured"
-fi
-
-# Validate that at least one API key is configured
-if [ -z "$OPENAI_API_KEY" ] && [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$DEEPSEEK_API_KEY" ] && [ -z "$OPENROUTER_API_KEY" ] && [ -z "$GEMINI_API_KEY" ]; then
-    log "❌ No API keys configured. Please provide at least one of: OPENAI_API_KEY, ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY, GEMINI_API_KEY"
+if [ ${#API_KEYS_CONFIGURED[@]} -eq 0 ]; then
+    log "❌ No API keys configured. Please provide at least one API key as a repository secret."
     post_comment "❌ **Configuration Error**: No API keys configured. Please add at least one API key as a repository secret."
     add_reaction "confused"
     exit 1
+else
+    log "✅ API keys configured for: $(IFS=', '; echo "${API_KEYS_CONFIGURED[*]}")"
 fi
 
 # Create temporary directories
