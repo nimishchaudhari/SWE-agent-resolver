@@ -44,6 +44,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install git+https://github.com/SWE-agent/SWE-agent
+          pip install PyGithub
 
       - name: Run SWE-agent wrapper
         run: python .github/actions/swe_agent_entrypoint.py
