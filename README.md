@@ -233,6 +233,11 @@ Simply comment on any GitHub issue with the trigger phrase:
 - `gpt-4o` (OpenAI GPT-4 Omni)
 - `gpt-4-turbo` (OpenAI GPT-4 Turbo)
 - `claude-3.5-sonnet` (Anthropic Claude)
+- `deepseek/deepseek-chat` (DeepSeek Chat)
+- `deepseek/deepseek-coder` (DeepSeek Coder)
+- `gemini/gemini-1.5-pro` (Google Gemini Pro)
+- `gemini/gemini-1.5-flash` (Google Gemini Flash)
+- OpenRouter models (use format: `openrouter/model-name`)
 
 ## 🔒 Security
 

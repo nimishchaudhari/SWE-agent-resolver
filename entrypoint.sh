@@ -160,6 +160,8 @@ fi
 
 if [ -n "$GEMINI_API_KEY" ]; then
     export GEMINI_API_KEY="$GEMINI_API_KEY"
+    # Gemini requires the GOOGLE_API_KEY environment variable for LiteLLM
+    export GOOGLE_API_KEY="$GEMINI_API_KEY"
     log "✅ Gemini API key configured"
 fi
 
