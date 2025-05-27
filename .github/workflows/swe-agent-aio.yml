@@ -59,7 +59,7 @@ jobs:
 
       - name: 🤖 Run SWE-Agent with Enhanced Features
         id: swe-agent
-        uses: ./
+        uses: nimishchaudhari/swe-agent-resolver@modular_rebase
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
