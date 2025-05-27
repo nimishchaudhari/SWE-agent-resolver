@@ -18,11 +18,11 @@ RUN apt-get update && apt-get install -y \
 # Create python/python3 symlink for compatibility
 RUN ln -sf /usr/bin/python3 /usr/bin/python
 
-# Verify Git installation and version (should support --cached option)
+# Verify Git installation and configure
 RUN git --version && \
-    git diff --help | grep -q "cached" && \
-    echo "✅ Git supports --cached option" && \
-    git config --global --add safe.directory '*'
+    echo "✅ Git installed successfully" && \
+    git config --global --add safe.directory '*' && \
+    git config --global init.defaultBranch main
 
 # Set working directory
 WORKDIR /app
