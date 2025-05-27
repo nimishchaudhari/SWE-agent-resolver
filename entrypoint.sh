@@ -368,9 +368,9 @@ if [ $SWE_EXIT_CODE -eq 0 ]; then
         
         # Write patch content to a file and set output
         PATCH_OUTPUT_FILE="$GITHUB_WORKSPACE/swe_agent_patch.txt"
-        echo "$PATCH_CONTENT" > "$PATCH_OUTPUT_FILE"
+        printf '%s\n' "$PATCH_CONTENT" > "$PATCH_OUTPUT_FILE"
         echo "patch_content<<EOF" >> $GITHUB_OUTPUT
-        echo "$PATCH_CONTENT" >> $GITHUB_OUTPUT
+        printf '%s\n' "$PATCH_CONTENT" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
         
         log "✅ Patch generated and saved to outputs"
@@ -384,9 +384,9 @@ if [ $SWE_EXIT_CODE -eq 0 ]; then
 ## 🔧 Generated Patch
 <details><summary>Diff</summary>
 
-```diff
-$PATCH_CONTENT
-```
+\`\`\`diff
+${PATCH_CONTENT}
+\`\`\`
 
 </details>
 
@@ -586,14 +586,17 @@ Comment \`@swe-agent\` with a more targeted, specific request!
             ERROR_INFO=$(tail -20 "$OUTPUT_DIR/swe_agent.log" 2>/dev/null | grep -E "(Error|Exception|Failed|Traceback)" | head -3 || echo "No specific errors found in log")
             
             # Show first 10 lines and last 10 lines of log for diagnosis
+            FIRST_10_LINES=$(head -10 "$OUTPUT_DIR/swe_agent.log" 2>/dev/null || echo "Could not read log file")
+            LAST_10_LINES=$(tail -10 "$OUTPUT_DIR/swe_agent.log" 2>/dev/null || echo "Could not read log file")
+            
             LOG_PREVIEW="**First 10 lines of log:**
 \`\`\`
-$(head -10 "$OUTPUT_DIR/swe_agent.log" 2>/dev/null || echo "Could not read log file")
+${FIRST_10_LINES}
 \`\`\`
 
 **Last 10 lines of log:**
 \`\`\`
-$(tail -10 "$OUTPUT_DIR/swe_agent.log" 2>/dev/null || echo "Could not read log file")
+${LAST_10_LINES}
 \`\`\`"
         else
             log "  - No log file found at $OUTPUT_DIR/swe_agent.log"
