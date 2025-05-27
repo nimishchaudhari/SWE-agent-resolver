@@ -1,0 +1,155 @@
+name: SWE-Agent AIO Resolver (All-In-One)
+
+on:
+  # Support for issue comments (original functionality)
+  issue_comment:
+    types: [created]
+  # Support for PR review comments
+  pull_request_review_comment:
+    types: [created]
+  # Support for PR reviews
+  pull_request_review:
+    types: [submitted]
+  # Support for PR comments
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  issues: write
+  contents: write
+  pull-requests: write
+  checks: write
+
+jobs:
+  swe-agent-aio:
+    name: SWE-Agent All-In-One Resolver
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@swe-agent')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@swe-agent')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@swe-agent')) ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.body, '@swe-agent'))
+    
+    steps:
+      - name: 🔍 Detect Context and Initialize
+        id: context-detection
+        shell: bash
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REVIEW_BODY: ${{ github.event.review.body }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          REVIEW_ID: ${{ github.event.review.id }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          ISSUE_PR_URL: ${{ github.event.issue.pull_request.url }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: ./scripts/context-detection.sh
+
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: 🤖 Run SWE-Agent with Enhanced Features
+        id: swe-agent
+        uses: ./
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          model_name: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}
+          
+          # Multi-context configuration
+          context_mode: 'auto'                    # Auto-detect context
+          pr_strategy: 'continue'                 # Continue existing PRs
+          git_reference_mode: 'auto'              # Context-based Git refs
+          enable_review_context: 'true'           # Handle review comments
+          target_branch_strategy: 'auto'          # Context-based branching
+          
+          # Enhanced response modes
+          response_mode: 'auto'                   # Auto-detect intent (patch/opinion/analysis/visual/pr_review)
+          enable_visual_content: 'true'          # Enable visual responses
+          visual_content_format: 'all'           # All visual formats
+          max_comment_length: '65536'            # Maximum response length
+          
+          # Performance tuning
+          timeout_seconds: '3000'                # 50 minutes max execution
+          
+        env:
+          # Pass context information to the resolver
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_EVENT_NUMBER: ${{ steps.context-detection.outputs.pr_number || steps.context-detection.outputs.issue_number }}
+          GITHUB_EVENT_COMMENT_BODY: ${{ steps.context-detection.outputs.comment_body }}
+          GITHUB_EVENT_ISSUE_TITLE: ${{ steps.context-detection.outputs.issue_title }}
+          GITHUB_EVENT_ISSUE_BODY: ${{ steps.context-detection.outputs.issue_body }}
+          GITHUB_EVENT_COMMENT_ID: ${{ steps.context-detection.outputs.comment_id }}
+          FINAL_CONTEXT_MODE: ${{ steps.context-detection.outputs.context_type }}
+
+      - name: 🔄 Handle PR Context (Apply to Existing PR)
+        if: |
+          always() && 
+          steps.swe-agent.outcome == 'success' &&
+          (steps.context-detection.outputs.context_type == 'pr_comment' || 
+           steps.context-detection.outputs.context_type == 'pr_review' ||
+           steps.context-detection.outputs.context_type == 'pr_review_comment') &&
+          steps.swe-agent.outputs.patch_generated == 'true'
+        shell: bash
+        env:
+          PATCH_CONTENT: ${{ steps.swe-agent.outputs.patch_content }}
+          PR_NUMBER: ${{ steps.context-detection.outputs.pr_number }}
+          MODEL_NAME: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}
+          EXECUTION_TIME: ${{ steps.swe-agent.outputs.execution_time }}
+          COMMENT_ID: ${{ steps.context-detection.outputs.comment_id }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/handle-pr-context.sh
+
+      - name: 🆕 Handle Issue Context (Create New PR)
+        if: |
+          always() && 
+          steps.swe-agent.outcome == 'success' &&
+          steps.context-detection.outputs.context_type == 'issue_comment' &&
+          steps.swe-agent.outputs.patch_generated == 'true'
+        shell: bash
+        env:
+          PATCH_CONTENT: ${{ steps.swe-agent.outputs.patch_content }}
+          ISSUE_NUMBER: ${{ steps.context-detection.outputs.issue_number }}
+          ISSUE_TITLE: ${{ steps.context-detection.outputs.issue_title }}
+          MODEL_NAME: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}
+          EXECUTION_TIME: ${{ steps.swe-agent.outputs.execution_time }}
+          COMMENT_ID: ${{ steps.context-detection.outputs.comment_id }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/handle-issue-context.sh
+
+      - name: 📊 Post Execution Summary
+        if: always()
+        shell: bash
+        env:
+          CONTEXT_TYPE: ${{ steps.context-detection.outputs.context_type }}
+          EXECUTION_TIME: ${{ steps.swe-agent.outputs.execution_time }}
+          PATCH_GENERATED: ${{ steps.swe-agent.outputs.patch_generated }}
+          MODEL_NAME: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}
+        run: |
+          echo "📊 SWE-Agent AIO Execution Summary"
+          echo "=================================="
+          echo "🔍 Context Type: $CONTEXT_TYPE"
+          echo "⏱️ Execution Time: $EXECUTION_TIME"
+          echo "🔧 Patch Generated: $PATCH_GENERATED"
+          echo "🤖 Model Used: $MODEL_NAME"
+          echo "✅ AIO Workflow Complete"
+
+      - name: 🧹 Cleanup and Notifications
+        if: always()
+        shell: bash
+        run: |
+          echo "🧹 Cleaning up temporary files..."
+          rm -f /tmp/swe_agent_fix.patch
+          echo "🔔 SWE-Agent AIO workflow completed successfully!"

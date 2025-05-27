@@ -24,8 +24,8 @@ jobs:
       - name: Test intent detection and configuration
         run: |
           echo "🧪 Running Enhanced Features Test Suite"
-          chmod +x ./test-enhanced-features.sh
-          ./test-enhanced-features.sh
+          chmod +x ./scripts/test-enhanced-features.sh
+          ./scripts/test-enhanced-features.sh
 
   test-syntax-validation:
     name: Validate Script Syntax
