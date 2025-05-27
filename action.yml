@@ -138,30 +138,8 @@ runs:
           sleep 10
         fi
 
-    - name: Determine Docker image tag
-      id: image-tag
-      shell: bash
-      run: |
-        # Get current branch name
-        CURRENT_BRANCH="${{ github.ref_name }}"
-        REGISTRY="ghcr.io/nimishchaudhari/swe-agent-resolver"
-        
-        # First try branch-specific image
-        BRANCH_IMAGE="${REGISTRY}:${CURRENT_BRANCH}"
-        
-        echo "🔍 Checking for branch-specific image: ${BRANCH_IMAGE}"
-        
-        # Check if branch-specific image exists
-        if docker manifest inspect "${BRANCH_IMAGE}" >/dev/null 2>&1; then
-          echo "✅ Using branch-specific image: ${BRANCH_IMAGE}"
-          echo "image=${BRANCH_IMAGE}" >> $GITHUB_OUTPUT
-        else
-          echo "⚠️ Branch-specific image not found, falling back to latest"
-          echo "image=${REGISTRY}:latest" >> $GITHUB_OUTPUT
-        fi
-
     - name: Run SWE-Agent
-      uses: docker://${{ steps.image-tag.outputs.image }}
+      uses: docker://ghcr.io/nimishchaudhari/swe-agent-resolver:latest
       env:
         INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
         INPUT_TRIGGER_PHRASE: ${{ inputs.trigger_phrase }}
