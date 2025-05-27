@@ -32,10 +32,10 @@ WORKDIR /app
 RUN git clone --depth 1 --single-branch https://github.com/SWE-agent/SWE-agent.git ./swe-agent
 
 # Install SWE-agent and dependencies
-# Separate pip upgrade and install for better caching
-RUN python -m pip install --upgrade pip
+# Ubuntu 24.04 requires --break-system-packages for system-wide pip installs in containers
+RUN python -m pip install --upgrade pip --break-system-packages
 RUN cd /app/swe-agent && \
-    pip install --no-cache-dir --editable .
+    pip install --no-cache-dir --editable . --break-system-packages
 
 # Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh
