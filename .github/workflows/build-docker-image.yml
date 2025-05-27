@@ -2,16 +2,20 @@ name: Build and Cache Docker Image
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, develop ]
     paths:
       - 'Dockerfile'
       - 'entrypoint.sh'
+      - 'src/**'
+      - 'scripts/**'
       - '.github/workflows/build-docker-image.yml'
   pull_request:
     branches: [ main, master ]
     paths:
       - 'Dockerfile'
       - 'entrypoint.sh'
+      - 'src/**'
+      - 'scripts/**'
   workflow_dispatch:
   schedule:
     # Rebuild weekly to get security updates
