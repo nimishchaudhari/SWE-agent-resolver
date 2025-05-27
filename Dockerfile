@@ -1,5 +1,5 @@
-# Use Ubuntu 22.04 which has a complete Git installation
-FROM ubuntu:22.04
+# Use Ubuntu 24.04 which has Python 3.12 and complete Git installation
+FROM ubuntu:24.04
 
 # Install Git, Python, and other dependencies
 RUN apt-get update && apt-get install -y \
