@@ -275,7 +275,7 @@ log "🤖 Running SWE-Agent with model: $MODEL_NAME"
 
 # Prepare model-specific parameters
 MODEL_PARAMS=()
-if [[ "$MODEL_NAME" == "o1" || "$MODEL_NAME" == "o3" || "$MODEL_NAME" == "o3-mini" || "$MODEL_NAME" == "o4-mini" ]]; then
+if [[ "$MODEL_NAME" == "openai/o1" || "$MODEL_NAME" == "openai/o3" || "$MODEL_NAME" == "openai/o3-mini" || "$MODEL_NAME" == "openai/o4-mini" ]]; then
     MODEL_PARAMS+=("--agent.model.top_p" "null" "--agent.model.temperature" "1.0")
 fi
 
