@@ -71,6 +71,138 @@ add_reaction() {
     fi
 }
 
+# Enhanced reaction system with context-aware responses
+add_contextual_reaction() {
+    local context="$1"
+    local reaction=""
+    
+    case "$context" in
+        "success_patch")
+            reaction="rocket"
+            ;;
+        "success_analysis")
+            reaction="mag"
+            ;;
+        "timeout")
+            reaction="hourglass_flowing_sand"
+            ;;
+        "killed")
+            reaction="skull_and_crossbones"
+            ;;
+        "api_error")
+            reaction="warning"
+            ;;
+        "general_error")
+            reaction="confused"
+            ;;
+        "processing")
+            reaction="eyes"
+            ;;
+        *)
+            reaction="thinking_face"
+            ;;
+    esac
+    
+    add_reaction "$reaction"
+}
+
+# Function to update progress with enhanced tracking
+update_progress() {
+    local stage="$1"
+    local message="$2"
+    local details="${3:-}"
+    
+    if [ -z "$PROGRESS_COMMENT_ID" ]; then
+        return
+    fi
+    
+    local progress_bar=""
+    local stage_emoji=""
+    local completion_percent=0
+    
+    case "$stage" in
+        "initializing")
+            progress_bar="▓░░░░░░░░░"
+            stage_emoji="🔧"
+            completion_percent=10
+            ;;
+        "analyzing")
+            progress_bar="▓▓▓░░░░░░░"
+            stage_emoji="🔍"
+            completion_percent=30
+            ;;
+        "planning")
+            progress_bar="▓▓▓▓▓░░░░░"
+            stage_emoji="📋"
+            completion_percent=50
+            ;;
+        "implementing")
+            progress_bar="▓▓▓▓▓▓▓░░░"
+            stage_emoji="⚙️"
+            completion_percent=70
+            ;;
+        "testing")
+            progress_bar="▓▓▓▓▓▓▓▓▓░"
+            stage_emoji="🧪"
+            completion_percent=90
+            ;;
+        "complete")
+            progress_bar="▓▓▓▓▓▓▓▓▓▓"
+            stage_emoji="✅"
+            completion_percent=100
+            ;;
+        *)
+            progress_bar="▓▓▓░░░░░░░"
+            stage_emoji="⏳"
+            completion_percent=25
+            ;;
+    esac
+    
+    local elapsed_time=""
+    start_time_file="$TEMP_DIR/start_time"
+    if [ -f "$start_time_file" ]; then
+        start_time_val=$(cat "$start_time_file")
+        current_time_val=$(date +%s)
+        if [[ "$start_time_val" =~ ^[0-9]+$ ]] && [[ "$current_time_val" =~ ^[0-9]+$ ]]; then
+            elapsed_seconds=$((current_time_val - start_time_val))
+            elapsed_minutes=$((elapsed_seconds / 60))
+            remaining_seconds=$((elapsed_seconds % 60))
+            if [ "$elapsed_minutes" -gt 0 ]; then
+                elapsed_time=" (${elapsed_minutes}m ${remaining_seconds}s)"
+            else
+                elapsed_time=" (${elapsed_seconds}s)"
+            fi
+        fi
+    fi
+    
+    local details_section=""
+    if [ -n "$details" ]; then
+        details_section="
+
+<details>
+<summary>📋 Stage Details</summary>
+
+${details}
+
+</details>"
+    fi
+    
+    PROGRESS_MESSAGE="🤖 **SWE-Agent is working on this issue...**
+
+**Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
+**Model:** ${MODEL_NAME}
+
+## 📊 Progress Status
+${progress_bar} ${completion_percent}% Complete${elapsed_time}
+
+${stage_emoji} **${message}**${details_section}
+
+---
+*Real-time progress updates • Last updated: $(date -u '+%H:%M:%S UTC')*"
+    
+    update_comment "$PROGRESS_COMMENT_ID" "$PROGRESS_MESSAGE"
+}
+
 # --- Main Execution ---
 log "🚀 SWE-Agent Issue Resolver started"
 
@@ -110,7 +242,7 @@ log "✅ Trigger phrase found. Processing issue #$ISSUE_NUMBER"
 log "📋 Issue: $ISSUE_TITLE"
 
 # Add eyes reaction to show we're processing
-add_reaction "eyes"
+add_contextual_reaction "processing"
 
 # Create initial progress comment
 INITIAL_MESSAGE="🤖 **SWE-Agent is working on this issue...**
@@ -173,6 +305,11 @@ mkdir -p "$REPO_DIR" "$OUTPUT_DIR"
 # Track start time for progress calculations
 echo "$(date +%s)" > "$TEMP_DIR/start_time"
 
+# Update progress: Initializing
+update_progress "initializing" "Setting up environment and cloning repository" "- Configuring API keys
+- Creating temporary directories
+- Preparing to clone repository"
+
 # Clone repository
 log "📥 Cloning repository..."
 if ! git clone "$REPO_URL" "$REPO_DIR"; then
@@ -181,6 +318,11 @@ if ! git clone "$REPO_URL" "$REPO_DIR"; then
     add_reaction "confused"
     exit 1
 fi
+
+# Update progress: Analyzing
+update_progress "analyzing" "Repository cloned, analyzing issue requirements" "- Repository: $(basename "$REPO_URL")
+- Issue: $ISSUE_TITLE
+- Preparing problem statement for SWE-Agent"
 
 # Change working directory to the PARENT of the cloned repo
 cd "$TEMP_DIR"
@@ -271,6 +413,11 @@ ${GITHUB_COMMENT_BODY_SUFFIX}"
 fi
 # --- End Diagnostic Checks ---
 
+# Update progress: Planning
+update_progress "planning" "Starting SWE-Agent analysis and solution planning" "- Model: $MODEL_NAME
+- Configuration validated
+- Ready to analyze issue and generate solution"
+
 log "🤖 Running SWE-Agent with model: $MODEL_NAME"
 
 # Prepare model-specific parameters
@@ -278,6 +425,11 @@ MODEL_PARAMS=()
 if [[ "$MODEL_NAME" == "openai/o1" || "$MODEL_NAME" == "openai/o3" || "$MODEL_NAME" == "openai/o3-mini" || "$MODEL_NAME" == "openai/o4-mini" ]]; then
     MODEL_PARAMS+=("--agent.model.top_p" "null" "--agent.model.temperature" "1.0")
 fi
+
+# Update progress: Implementing
+update_progress "implementing" "SWE-Agent is analyzing the codebase and implementing solution" "- Scanning repository structure
+- Understanding issue context
+- Generating and testing potential fixes"
 
 # Execute SWE-Agent with correct 1.0+ command format
 sweagent run \
@@ -355,11 +507,23 @@ if [ $SWE_EXIT_CODE -eq 0 ]; then
     
     # Generate final response and update the progress comment
     if [ "$PATCH_FOUND" = true ] && [ -n "$PATCH_CONTENT" ]; then
+        # Calculate patch statistics
+        FILES_CHANGED=$(echo "$PATCH_CONTENT" | grep -c "^diff --git" || echo "0")
+        LINES_ADDED=$(echo "$PATCH_CONTENT" | grep -c "^+" || echo "0")
+        LINES_REMOVED=$(echo "$PATCH_CONTENT" | grep -c "^-" || echo "0")
+        # Subtract the diff headers from line counts
+        LINES_ADDED=$((LINES_ADDED - FILES_CHANGED))
+        LINES_REMOVED=$((LINES_REMOVED - FILES_CHANGED))
+        if [ $LINES_ADDED -lt 0 ]; then LINES_ADDED=0; fi
+        if [ $LINES_REMOVED -lt 0 ]; then LINES_REMOVED=0; fi
+        
         # Truncate patch if too long (GitHub comment limit)
+        TRUNCATED=false
         if [ ${#PATCH_CONTENT} -gt 40000 ]; then
             PATCH_CONTENT="${PATCH_CONTENT:0:40000}
 ...
 (Patch truncated - too long for comment)"
+            TRUNCATED=true
         fi
 
         # Set action outputs
@@ -375,14 +539,32 @@ if [ $SWE_EXIT_CODE -eq 0 ]; then
         
         log "✅ Patch generated and saved to outputs"
         
-        FINAL_MESSAGE="✅ **Solution Generated!**
+        # Generate statistics summary
+        STATS_SUMMARY=""
+        if [ "$FILES_CHANGED" -gt 0 ]; then
+            STATS_SUMMARY="**📊 Patch Statistics:**
+- 📁 Files changed: **${FILES_CHANGED}**
+- ➕ Lines added: **${LINES_ADDED}**
+- ➖ Lines removed: **${LINES_REMOVED}**
+- 📏 Net change: **$((LINES_ADDED - LINES_REMOVED))** lines"
+            if [ "$TRUNCATED" = true ]; then
+                STATS_SUMMARY="$STATS_SUMMARY
+- ⚠️ **Note:** Patch was truncated for display (see full patch in PR)"
+            fi
+        fi
+        
+        FINAL_MESSAGE="✅ **Solution Generated Successfully!**
 
 **Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
 **Model:** ${MODEL_NAME}
 **Execution Time:** ${elapsed_minutes_str}
 
+${STATS_SUMMARY}
+
 ## 🔧 Generated Patch
-<details><summary>Diff</summary>
+
+<details>
+<summary>📄 Click to view generated patch (${FILES_CHANGED} files changed)</summary>
 
 \`\`\`diff
 ${PATCH_CONTENT}
@@ -390,11 +572,16 @@ ${PATCH_CONTENT}
 
 </details>
 
-## 🔄 Processing...
-The patch is being processed and a Pull Request will be created shortly.
+## 🔄 Next Steps
+✨ The patch is being processed and a Pull Request will be created shortly.
+
+**What happens next:**
+1. 🔄 Patch validation and testing
+2. 📝 Pull Request creation with detailed description
+3. ✅ Ready for review and merge
 
 ---
-*✨ Generated by SWE-Agent using $MODEL_NAME*"
+*✨ Generated by SWE-Agent using $MODEL_NAME • [View full patch in upcoming PR]*"
         
         # Update the progress comment with final results
         if [ -n "$PROGRESS_COMMENT_ID" ]; then
@@ -403,7 +590,7 @@ The patch is being processed and a Pull Request will be created shortly.
             post_comment "$FINAL_MESSAGE"
         fi
         
-        add_reaction "thumbsup"
+        add_contextual_reaction "success_patch"
         
     else
         log "⚠️ No patch found in SWE-Agent output"
@@ -413,7 +600,7 @@ The patch is being processed and a Pull Request will be created shortly.
         echo "execution_time=${elapsed_minutes_str}" >> $GITHUB_OUTPUT
         echo "patch_content=" >> $GITHUB_OUTPUT
         
-        FINAL_MESSAGE="✅ **SWE-Agent Analysis Complete**
+        FINAL_MESSAGE="🔍 **Analysis Completed - No Code Changes Needed**
 
 **Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
 **Model:** ${MODEL_NAME}
@@ -421,25 +608,41 @@ The patch is being processed and a Pull Request will be created shortly.
 **Execution Time:** ${elapsed_minutes_str}
 
 ## 🔍 Analysis Results
-I've analyzed the issue but didn't generate a code patch. This might mean:
+I've thoroughly analyzed the issue but didn't generate a code patch. This could mean:
 
-- 📋 **Investigation needed** - The issue requires manual investigation
-- ℹ️ **More information needed** - Additional details would help provide a solution
+### 🤔 Possible Reasons:
+- 📋 **Investigation/Research needed** - Requires manual investigation
+- ℹ️ **More information needed** - Additional details would help
 - ✅ **Already resolved** - The problem may already be fixed
-- 📝 **Documentation issue** - The issue might be related to documentation rather than code
-- 🔧 **Complex solution required** - The fix might require architectural changes
+- 📝 **Documentation issue** - Related to docs rather than code
+- 🏗️ **Architecture decision** - Requires design/architecture changes
+- 🔧 **Configuration issue** - Settings or environment related
 
-## 💡 What You Can Do
-1. **Provide more details** about the issue
-2. **Add specific examples** of the problem
-3. **Include error messages** or logs if available
-4. **Specify expected behavior** vs actual behavior
-5. **Try rephrasing** the request with more specific requirements
+## 💡 How to Get Better Results
 
-Feel free to comment with additional information and trigger the agent again!
+<details>
+<summary>🎯 Tips for more specific requests</summary>
+
+**Instead of:** \"Fix the login system\"
+**Try:** \"Fix authentication error on line 45 in auth.py - users can't log in with valid credentials\"
+
+**Include:**
+- 📍 **Specific files/functions** affected
+- 🐛 **Error messages** or logs
+- 📋 **Steps to reproduce** the issue
+- ✅ **Expected vs actual behavior**
+- 🔗 **Related issue links** or context
+
+</details>
+
+## 🔄 Ready to Try Again?
+
+**Option 1:** Comment `@swe-agent` with more specific details
+**Option 2:** Try breaking down into smaller, focused requests
+**Option 3:** Include error logs or specific examples
 
 ---
-*🤖 Analysis by SWE-Agent using $MODEL_NAME*"
+*🤖 Analysis by SWE-Agent using $MODEL_NAME • No code changes required*"
         
         # Update the progress comment with final results
         if [ -n "$PROGRESS_COMMENT_ID" ]; then
@@ -448,7 +651,7 @@ Feel free to comment with additional information and trigger the agent again!
             post_comment "$FINAL_MESSAGE"
         fi
         
-        add_reaction "thinking_face"
+        add_contextual_reaction "success_analysis"
     fi
     
 else
@@ -479,32 +682,45 @@ else
         echo "execution_time=${run_duration_str}" >> $GITHUB_OUTPUT
         echo "patch_content=" >> $GITHUB_OUTPUT
         
-        TIMEOUT_MESSAGE="⏰ **SWE-Agent Process Exceeded Expected Time**
+        TIMEOUT_MESSAGE="⏰ **Analysis Timeout - Let's Optimize the Request**
 
 **Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}  
 **Model:** ${MODEL_NAME}
-**Result:** Process took longer than expected (actual runtime: ${run_duration_str}).
+**Runtime:** ${run_duration_str} (exceeded expected completion time)
 
 ## ⏱️ What Happened
-The analysis took longer than the configured timeout and was stopped. This is a fallback, and ideally, the agent should manage its own execution time.
+The analysis took longer than expected and was stopped as a safety measure.
 
-## 🔧 Possible Solutions
-- **Simplify the request** - Break down complex issues into smaller, specific parts
-- **Provide more details** - Help SWE-Agent focus on the core problem with specific examples
-- **Check agent configuration** - The agent's internal timeouts or iteration limits might need adjustment for complex tasks.
-- **Try different approach** - Rephrase the issue description to be more specific
+## 🎯 Quick Fixes to Try
 
-## 💡 Tips for Better Results
-1. **Be specific** - \"Fix login bug on line 45\" vs \"Fix login issues\"
-2. **Include context** - Provide error messages, expected vs actual behavior
-3. **One issue at a time** - Don't mix multiple problems in one request
-4. **Add examples** - Show input/output or steps to reproduce
+<details>
+<summary>🚀 Make Your Request More Efficient</summary>
+
+### ✅ **Effective Requests:**
+- \"Fix TypeError on line 123 in utils.py\"
+- \"Update deprecated API call in user_service.py\"
+- \"Fix import error in main.py after recent changes\"
+
+### ❌ **Requests That May Timeout:**
+- \"Fix all bugs in the application\"
+- \"Refactor the entire codebase\"
+- \"Improve performance everywhere\"
+
+### 📋 **Best Practices:**
+1. **Focus on ONE specific issue**
+2. **Include file names and line numbers**
+3. **Provide error messages or stack traces**
+4. **Describe expected vs actual behavior**
+
+</details>
 
 ## 🔄 Ready to Try Again?
-Comment \`@swe-agent\` with a more focused request!
+Comment `@swe-agent` with a **focused, specific request** - the more precise, the faster the results!
+
+**Example:** `@swe-agent Fix the import error in auth.py line 15 - cannot import User from models`
 
 ---
-*⏰ SWE-Agent using $MODEL_NAME (runtime: ${run_duration_str})*"
+*⏰ SWE-Agent using $MODEL_NAME • Runtime optimization needed*"
         
         # Update progress comment with timeout message
         if [ -n "$PROGRESS_COMMENT_ID" ]; then
@@ -513,7 +729,7 @@ Comment \`@swe-agent\` with a more focused request!
             post_comment "$TIMEOUT_MESSAGE"
         fi
         
-        add_reaction "hourglass_flowing_sand"
+        add_contextual_reaction "timeout"
         
     elif [ $SWE_EXIT_CODE -eq 137 ]; then
         log "💀 SWE-Agent was killed (likely due to hanging or resource limits)"
@@ -559,7 +775,7 @@ Comment \`@swe-agent\` with a more targeted, specific request!
             post_comment "$KILLED_MESSAGE"
         fi
         
-        add_reaction "skull"
+        add_contextual_reaction "killed"
         
     else
         log "❌ SWE-Agent execution failed with exit code: $SWE_EXIT_CODE"
@@ -603,7 +819,7 @@ ${LAST_10_LINES}
             ERROR_INFO="No log file was created - SWE-Agent failed immediately"
         fi
         
-        FAILURE_MESSAGE="❌ **SWE-Agent Execution Failed**
+        FAILURE_MESSAGE="❌ **Analysis Failed - Let's Diagnose and Fix This**
 
 **Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
 **Model:** ${MODEL_NAME}
@@ -611,40 +827,60 @@ ${LAST_10_LINES}
 **Runtime:** ${run_duration_str}
 
 ## 🚨 What Happened
-I encountered an error while trying to analyze and fix this issue.
+I encountered an error while analyzing this issue. Let's figure out what went wrong and how to fix it.
 
-## 🔍 Diagnostic Information
-- **Model:** ${MODEL_NAME}
-- **Exit Code:** ${SWE_EXIT_CODE}
-- **Repository:** Successfully cloned
-- **Problem Statement:** Created successfully
+## 🔍 Diagnostic Summary
+- **Model:** ${MODEL_NAME} $([ "$SWE_EXIT_CODE" -eq 1 ] && echo "(❌ Model access issue)" || echo "(✅ Model accessible)")
+- **Exit Code:** ${SWE_EXIT_CODE} $([ "$SWE_EXIT_CODE" -eq 1 ] && echo "(API/Authentication error)" || echo "")
+- **Repository:** ✅ Successfully cloned
+- **Issue Processing:** ✅ Problem statement created
 
-## 📋 Error Details
+## 📋 Error Analysis
 ${ERROR_INFO}
+
+<details>
+<summary>🔍 Technical Details (Click to expand)</summary>
 
 ${LOG_PREVIEW}
 
-## 🔍 Possible Causes
-- **Issue complexity** - The problem might require human intervention
-- **API limits** - Rate limiting or model constraints from the AI provider
-- **Repository issues** - Access permissions or repository-specific limitations  
-- **Service problems** - Temporary issues with SWE-Agent or AI model services
-- **Configuration issues** - Problems with model setup or parameters
-- **Installation issues** - SWE-Agent may not be properly installed
+</details>
 
-## 🛠️ What You Can Try
-1. **Rephrase the request** - Provide more details or context about the issue
-2. **Check the issue description** - Ensure it's clear and complete
-3. **Try again later** - If this was a temporary API or service issue
-4. **Simplify the request** - Focus on one specific aspect of the problem
-5. **Use a different model** - Try switching between GPT-4o and Claude models
-6. **Contact maintainers** - If this error persists, please report it
+## 🛠️ Smart Recovery Suggestions
 
-## 🔄 Ready to Try Again?  
-Comment \`@swe-agent\` with additional context or a rephrased request!
+<details>
+<summary>🎯 Based on the error, try these solutions</summary>
+
+### 🔧 **Immediate Actions:**
+$(if [ "$SWE_EXIT_CODE" -eq 1 ]; then
+    echo "- **API Issue Detected** - This looks like a model access problem
+- Try using a different model (add model specification to your comment)
+- Check if API rate limits were exceeded
+- Example: \`@swe-agent using claude-3-5-sonnet\`"
+else
+    echo "- **Rephrase your request** with more specific details
+- **Include error messages** if you have them
+- **Specify file names** and locations if known
+- **Break down complex requests** into smaller parts"
+fi)
+
+### 🎭 **Alternative Models to Try:**
+- \`@swe-agent using gpt-4o\` - OpenAI's latest model
+- \`@swe-agent using claude-3-5-sonnet\` - Anthropic's advanced model
+- \`@swe-agent using deepseek/deepseek-coder\` - Specialized coding model
+
+### 📝 **Request Optimization:**
+- Be more specific about the problem location
+- Include stack traces or error logs
+- Describe what you've already tried
+- Mention any recent changes that might be related
+
+</details>
+
+## 🔄 Ready to Try Again?
+**Quick retry:** Comment \`@swe-agent\` with additional context or try a different model!
 
 ---
-*❌ SWE-Agent using $MODEL_NAME (runtime: ${run_duration_str})*"
+*❌ SWE-Agent using $MODEL_NAME • Error recovery assistance available*"
         
         # Update progress comment with failure message
         if [ -n "$PROGRESS_COMMENT_ID" ]; then
@@ -653,7 +889,12 @@ Comment \`@swe-agent\` with additional context or a rephrased request!
             post_comment "$FAILURE_MESSAGE"
         fi
         
-        add_reaction "confused"
+        # Determine reaction type based on exit code
+        if [ "$SWE_EXIT_CODE" -eq 1 ]; then
+            add_contextual_reaction "api_error"
+        else
+            add_contextual_reaction "general_error"
+        fi
     fi
 fi
 
