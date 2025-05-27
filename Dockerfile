@@ -24,7 +24,9 @@ RUN cd /app/swe-agent && \
 
 # Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh
+COPY src/ /src/
 RUN chmod +x /entrypoint.sh
+RUN chmod +x /src/*.sh
 
 # Set entrypoint
 ENTRYPOINT ["/entrypoint.sh"]
