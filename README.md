@@ -11,6 +11,40 @@ A complete GitHub Action that automatically resolves issues using [SWE-Agent](ht
 - 📝 **Real-time Progress Updates** [TO BE IMPLEMENTED]: Posts live updates to GitHub issues
 - ⚡ **Complete Automation** [The user's comment needs to be detailed enough]: From analysis to PR creation, fully automated
 
+## 🎯 Enhanced Response Modes (New!)
+
+SWE-Agent now supports multiple response types beyond just code patches:
+
+### 💡 Opinion & Advisory
+Get expert recommendations and best practices:
+```
+@swe-agent What do you think about this architecture approach?
+@swe-agent Should I use microservices or monolith for this project?
+```
+
+### 🔍 Technical Analysis  
+Receive detailed code and architectural analysis:
+```
+@swe-agent Analyze this authentication flow for security issues
+@swe-agent Review the performance implications of this design
+```
+
+### 📊 Visual Content
+Generate diagrams, charts, and visual representations:
+```
+@swe-agent Create a diagram showing the data flow
+@swe-agent Visualize the database schema relationships
+```
+
+### 🔧 Traditional Patches
+Continue using full SWE-Agent for code fixes:
+```
+@swe-agent Fix the SQL injection vulnerability
+@swe-agent Implement error handling for the API
+```
+
+**[📚 Learn more about Enhanced Features →](ENHANCED_FEATURES.md)**
+
 ## 🚀 Quick Setup
 
 ### Option 1: Complete Workflow (Recommended)
@@ -223,10 +257,17 @@ Simply comment on any GitHub issue with the trigger phrase:
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
 | `github_token` | GitHub token for API access | Yes | `${{ github.token }}` |
-| `llm_api_key` | OpenAI/Anthropic API key | Yes | - |
+| `openai_api_key` | OpenAI API key | No | - |
+| `anthropic_api_key` | Anthropic API key | No | - |
+| `openrouter_api_key` | OpenRouter API key | No | - |
+| `gemini_api_key` | Google Gemini API key | No | - |
 | `trigger_phrase` | Phrase that triggers the agent | No | `@swe-agent` |
 | `model_name` | AI model to use | No | `gpt-4o` |
 | `timeout_minutes` | Max execution time | No | `30` |
+| `response_mode` | Response type: `auto`, `patch`, `opinion`, `analysis`, `visual` | No | `auto` |
+| `enable_visual_content` | Enable visual content generation | No | `true` |
+| `visual_content_format` | Visual format: `mermaid`, `ascii`, `code`, `all` | No | `all` |
+| `max_comment_length` | Maximum response length in characters | No | `65536` |
 
 ### Supported Models
 

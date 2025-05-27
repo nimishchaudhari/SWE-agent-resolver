@@ -14,6 +14,12 @@ OPENROUTER_API_KEY="${INPUT_OPENROUTER_API_KEY}"
 GEMINI_API_KEY="${INPUT_GEMINI_API_KEY}"
 MODEL_NAME="${INPUT_MODEL_NAME:-gpt-4o}"
 
+# New configuration for enhanced response modes
+RESPONSE_MODE="${INPUT_RESPONSE_MODE:-auto}"
+ENABLE_VISUAL_CONTENT="${INPUT_ENABLE_VISUAL_CONTENT:-true}"
+VISUAL_CONTENT_FORMAT="${INPUT_VISUAL_CONTENT_FORMAT:-all}"
+MAX_COMMENT_LENGTH="${INPUT_MAX_COMMENT_LENGTH:-65536}"
+
 # GitHub API URL
 GITHUB_API_URL="${GITHUB_API_URL:-https://api.github.com}"
 
@@ -83,6 +89,12 @@ add_contextual_reaction() {
         "success_analysis")
             reaction="mag"
             ;;
+        "success_opinion")
+            reaction="bulb"
+            ;;
+        "success_visual")
+            reaction="chart_with_upwards_trend"
+            ;;
         "timeout")
             reaction="hourglass_flowing_sand"
             ;;
@@ -97,6 +109,9 @@ add_contextual_reaction() {
             ;;
         "processing")
             reaction="eyes"
+            ;;
+        "analyzing")
+            reaction="mag"
             ;;
         *)
             reaction="thinking_face"
@@ -203,86 +218,472 @@ ${stage_emoji} **${message}**${details_section}
     update_comment "$PROGRESS_COMMENT_ID" "$PROGRESS_MESSAGE"
 }
 
-# --- Main Execution ---
-log "🚀 SWE-Agent Issue Resolver started"
+# Function to detect request intent from comment content
+detect_request_intent() {
+    local comment="$1"
+    local intent="patch"  # default
+    
+    # Convert to lowercase for case-insensitive matching
+    local lower_comment=$(echo "$comment" | tr '[:upper:]' '[:lower:]')
+    
+    # Visual content keywords (highest priority)
+    if [[ "$lower_comment" =~ (chart|plot|graph|diagram|visualize|visualization|picture|image|screenshot|draw|show.*me.*visual) ]]; then
+        intent="visual"
+    # Analysis keywords (second priority)
+    elif [[ "$lower_comment" =~ (analyze|analysis|explain|understand|investigate|examine|review|assess|evaluate|why|how.*work|what.*happen) ]]; then
+        intent="analysis"
+    # Opinion/advice keywords (third priority)
+    elif [[ "$lower_comment" =~ (opinion|advice|suggest|recommend|think|thoughts|what.*do.*you|should.*i|best.*practice|approach|strategy) ]]; then
+        intent="opinion"
+    # Code fix keywords (default when explicit)
+    elif [[ "$lower_comment" =~ (fix|patch|solve|resolve|implement|code|bug|error|issue) ]]; then
+        intent="patch"
+    fi
+    
+    echo "$intent"
+}
 
-# Parse GitHub event
-EVENT_PATH="${GITHUB_EVENT_PATH}"
-if [ ! -f "$EVENT_PATH" ]; then
-    log "❌ GitHub event file not found"
-    exit 1
-fi
+# Function to generate visual content
+generate_visual_content() {
+    local content_type="$1"
+    local description="$2"
+    local format="$3"
+    
+    case "$content_type" in
+        "mermaid")
+            echo "\`\`\`mermaid"
+            echo "$description"
+            echo "\`\`\`"
+            ;;
+        "ascii")
+            echo "\`\`\`"
+            echo "$description"
+            echo "\`\`\`"
+            ;;
+        "code")
+            echo "\`\`\`python"
+            echo "# Generated visualization code"
+            echo "$description"
+            echo "\`\`\`"
+            ;;
+    esac
+}
 
-# Extract comment details
-COMMENT_BODY=$(jq -r '.comment.body' "$EVENT_PATH")
-COMMENT_ID=$(jq -r '.comment.id' "$EVENT_PATH")
-ISSUE_NUMBER=$(jq -r '.issue.number' "$EVENT_PATH")
-ISSUE_TITLE=$(jq -r '.issue.title' "$EVENT_PATH")
-ISSUE_BODY=$(jq -r '.issue.body // ""' "$EVENT_PATH")
-REPO_URL=$(jq -r '.repository.clone_url' "$EVENT_PATH")
+# Function to format response based on intent
+format_response_by_intent() {
+    local intent="$1"
+    local content="$2"
+    local issue_number="$3"
+    local issue_title="$4"
+    local model_name="$5"
+    local execution_time="$6"
+    
+    case "$intent" in
+        "opinion")
+            cat << 'EOF'
+💡 **SWE-Agent Opinion & Recommendations**
 
-# Validate extracted data
-if [ -z "$COMMENT_BODY" ] || [ "$COMMENT_BODY" == "null" ]; then
-    log "❌ Could not extract comment body"
-    exit 1
-fi
+**Issue:** #${issue_number} - ${issue_title}
+**Model:** ${model_name}
+**Response Type:** Opinion & Advice
+**Analysis Time:** ${execution_time}
 
-if [ -z "$ISSUE_NUMBER" ] || [ "$ISSUE_NUMBER" == "null" ]; then
-    log "❌ Could not extract issue number"
-    exit 1
-fi
+## 🤔 My Analysis & Opinion
 
-# Check if comment contains trigger phrase
-if [[ "$COMMENT_BODY" != *"$TRIGGER_PHRASE"* ]]; then
-    log "🔍 Comment doesn't contain trigger phrase '$TRIGGER_PHRASE'"
-    exit 0
-fi
+${content}
 
-log "✅ Trigger phrase found. Processing issue #$ISSUE_NUMBER"
-log "📋 Issue: $ISSUE_TITLE"
+## 💡 Key Recommendations
 
-# Add eyes reaction to show we're processing
-add_contextual_reaction "processing"
+<details>
+<summary>🎯 Click to view detailed recommendations</summary>
 
-# Create initial progress comment
-INITIAL_MESSAGE="🤖 **SWE-Agent is working on this issue...**
+${content}
 
-**Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
-**Model:** ${MODEL_NAME}
+</details>
 
-## 📊 Progress Status
-⏳ **Starting up...** - Initializing SWE-Agent environment
+## 🚀 Next Steps
+Based on my analysis, here's what I'd recommend:
+
+1. **Consider the trade-offs** mentioned above
+2. **Test thoroughly** before implementing
+3. **Follow best practices** for your specific use case
+4. **Monitor the results** after implementation
 
 ---
-*This comment will be updated with real-time progress. Please wait...*"
+*💡 SWE-Agent using ${model_name} • Opinion & advisory response*
+EOF
+            ;;
+        "analysis")
+            cat << 'EOF'
+🔍 **SWE-Agent Code Analysis Report**
 
-PROGRESS_COMMENT_ID=$(post_comment "$INITIAL_MESSAGE")
+**Issue:** #${issue_number} - ${issue_title}
+**Model:** ${model_name}
+**Response Type:** Technical Analysis
+**Analysis Time:** ${execution_time}
 
-if [ -z "$PROGRESS_COMMENT_ID" ]; then
-    log "⚠️ Could not create progress comment, continuing without real-time updates"
+## 📊 Analysis Results
+
+${content}
+
+## 🔍 Technical Details
+
+<details>
+<summary>📋 Click to view detailed technical analysis</summary>
+
+${content}
+
+</details>
+
+## 🎯 Key Findings
+- **Architecture Impact:** Analyzing structural implications
+- **Performance Considerations:** Evaluating efficiency factors
+- **Security Implications:** Assessing security aspects
+- **Maintenance Burden:** Reviewing long-term maintainability
+
+---
+*🔍 SWE-Agent using ${model_name} • Technical analysis complete*
+EOF
+            ;;
+        "visual")
+            cat << 'EOF'
+📊 **SWE-Agent Visual Analysis**
+
+**Issue:** #${issue_number} - ${issue_title}
+**Model:** ${model_name}
+**Response Type:** Visual Content
+**Generation Time:** ${execution_time}
+
+## 📈 Generated Visualization
+
+${content}
+
+## 🎨 Visual Content Details
+
+<details>
+<summary>🖼️ Click to view additional visual formats</summary>
+
+${content}
+
+</details>
+
+## 📋 How to Use This Visualization
+1. **Copy the diagram code** from the sections above
+2. **Paste into your preferred tool** (Mermaid Live Editor, ASCII art viewer, etc.)
+3. **Customize as needed** for your specific requirements
+4. **Include in documentation** or presentations
+
+---
+*📊 SWE-Agent using ${model_name} • Visual content generated*
+EOF
+            ;;
+        *)
+            # Default patch format (existing behavior)
+            echo "$content"
+            ;;
+    esac
+}
+
+# Function to handle opinion/analysis requests without SWE-Agent
+handle_non_patch_request() {
+    local intent="$1"
+    local comment_body="$2"
+    local issue_title="$3"
+    local issue_body="$4"
+    local issue_number="$5"
+    local model_name="$6"
+    
+    # For opinion/analysis requests, use a lightweight AI call instead of full SWE-Agent
+    local analysis_prompt=""
+    case "$intent" in
+        "opinion")
+            analysis_prompt="As an experienced software engineer, provide your opinion and recommendations for this issue:
+
+Issue: $issue_title
+Description: $issue_body
+User Request: $comment_body
+
+Please provide thoughtful advice, best practices, and recommendations. Focus on practical guidance rather than code generation."
+            ;;
+        "analysis")
+            analysis_prompt="As an expert code analyst, analyze this software issue:
+
+Issue: $issue_title
+Description: $issue_body
+User Request: $comment_body
+
+Please provide a technical analysis covering architecture, performance, security, and maintainability aspects. Explain the underlying causes and implications."
+            ;;
+        "visual")
+            analysis_prompt="Create visual content to help explain this software issue:
+
+Issue: $issue_title
+Description: $issue_body
+User Request: $comment_body
+
+Generate diagrams, charts, or visual representations using Mermaid syntax, ASCII art, or code examples that would help visualize the problem or solution."
+            ;;
+    esac
+    
+    # Use a lightweight AI API call for non-patch requests
+    local response_content=""
+    local api_call_success=false
+    
+    # Prepare API call based on available API keys
+    if [ -n "$OPENAI_API_KEY" ]; then
+        log "🔗 Calling OpenAI API for $intent response..."
+        response_content=$(call_openai_api "$analysis_prompt" "$model_name")
+        if [[ ! "$response_content" =~ ^Error: ]]; then
+            api_call_success=true
+        fi
+    elif [ -n "$ANTHROPIC_API_KEY" ]; then
+        log "🔗 Calling Anthropic API for $intent response..."
+        response_content=$(call_anthropic_api "$analysis_prompt" "$model_name")
+        if [[ ! "$response_content" =~ ^Error: ]]; then
+            api_call_success=true
+        fi
+    elif [ -n "$OPENROUTER_API_KEY" ]; then
+        log "🔗 Calling OpenRouter API for $intent response..."
+        response_content=$(call_openrouter_api "$analysis_prompt" "$model_name")
+        if [[ ! "$response_content" =~ ^Error: ]]; then
+            api_call_success=true
+        fi
+    elif [ -n "$GEMINI_API_KEY" ]; then
+        log "🔗 Calling Gemini API for $intent response..."
+        response_content=$(call_gemini_api "$analysis_prompt" "$model_name")
+        if [[ ! "$response_content" =~ ^Error: ]]; then
+            api_call_success=true
+        fi
+    else
+        log "❌ No API keys available for lightweight AI processing"
+        response_content="I apologize, but I don't have access to AI services to provide this type of response. Please ensure you have configured at least one API key (OpenAI, Anthropic, OpenRouter, or Gemini) in your repository secrets."
+        return 1
+    fi
+    
+    # Validate response
+    if [ "$api_call_success" = true ] && [ -n "$response_content" ] && [ ${#response_content} -gt 10 ]; then
+        log "✅ Successfully generated $intent response (${#response_content} characters)"
+        echo "$response_content"
+        return 0
+    else
+        log "❌ Failed to generate valid $intent response: $response_content"
+        return 1
+    fi
+}
+
+# --- AI API Call Functions ---
+
+# Function to call OpenAI API
+call_openai_api() {
+    local prompt="$1"
+    local model="$2"
+    
+    # Default to gpt-4o if model not specified or not supported
+    local api_model="$model"
+    if [[ ! "$model" =~ ^(gpt-4o|gpt-4-turbo|gpt-3.5-turbo|gpt-4)$ ]]; then
+        api_model="gpt-4o"
+    fi
+    
+    local json_payload=$(jq -n \
+        --arg model "$api_model" \
+        --arg prompt "$prompt" \
+        '{
+            "model": $model,
+            "messages": [{"role": "user", "content": $prompt}],
+            "max_tokens": 2048,
+            "temperature": 0.7
+        }')
+    
+    local response=$(curl -s -X POST "https://api.openai.com/v1/chat/completions" \
+        -H "Authorization: Bearer $OPENAI_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d "$json_payload")
+    
+    echo "$response" | jq -r '.choices[0].message.content // "Error: Unable to get response from OpenAI"'
+}
+
+# Function to call Anthropic API
+call_anthropic_api() {
+    local prompt="$1"
+    local model="$2"
+    
+    # Default to claude-3-5-sonnet if model not specified or not supported
+    local api_model="$model"
+    if [[ ! "$model" =~ ^(claude-3-5-sonnet|claude-3-haiku|claude-3-opus)$ ]]; then
+        api_model="claude-3-5-sonnet-20241022"
+    fi
+    
+    local json_payload=$(jq -n \
+        --arg model "$api_model" \
+        --arg prompt "$prompt" \
+        '{
+            "model": $model,
+            "messages": [{"role": "user", "content": $prompt}],
+            "max_tokens": 2048
+        }')
+    
+    local response=$(curl -s -X POST "https://api.anthropic.com/v1/messages" \
+        -H "X-API-Key: $ANTHROPIC_API_KEY" \
+        -H "Content-Type: application/json" \
+        -H "anthropic-version: 2023-06-01" \
+        -d "$json_payload")
+    
+    echo "$response" | jq -r '.content[0].text // "Error: Unable to get response from Anthropic"'
+}
+
+# Function to call OpenRouter API
+call_openrouter_api() {
+    local prompt="$1"
+    local model="$2"
+    
+    # Use the model as-is for OpenRouter
+    local json_payload=$(jq -n \
+        --arg model "$model" \
+        --arg prompt "$prompt" \
+        '{
+            "model": $model,
+            "messages": [{"role": "user", "content": $prompt}],
+            "max_tokens": 2048,
+            "temperature": 0.7
+        }')
+    
+    local response=$(curl -s -X POST "https://openrouter.ai/api/v1/chat/completions" \
+        -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d "$json_payload")
+    
+    echo "$response" | jq -r '.choices[0].message.content // "Error: Unable to get response from OpenRouter"'
+}
+
+# Function to call Gemini API
+call_gemini_api() {
+    local prompt="$1"
+    local model="$2"
+    
+    # Default to gemini-pro if model not specified
+    local api_model="gemini-pro"
+    if [[ "$model" =~ ^(gemini-pro|gemini-1.5-pro|gemini-1.5-flash)$ ]]; then
+        api_model="$model"
+    fi
+    
+    local json_payload=$(jq -n \
+        --arg prompt "$prompt" \
+        '{
+            "contents": [{"parts": [{"text": $prompt}]}],
+            "generationConfig": {"maxOutputTokens": 2048, "temperature": 0.7}
+        }')
+    
+    local response=$(curl -s -X POST "https://generativelanguage.googleapis.com/v1beta/models/${api_model}:generateContent?key=${GEMINI_API_KEY}" \
+        -H "Content-Type: application/json" \
+        -d "$json_payload")
+    
+    echo "$response" | jq -r '.candidates[0].content.parts[0].text // "Error: Unable to get response from Gemini"'
+}
+
+# --- GitHub Context Extraction ---
+log "🔍 Extracting GitHub context..."
+
+# Extract GitHub context from environment
+GITHUB_REPOSITORY="${GITHUB_REPOSITORY}"
+ISSUE_NUMBER="${GITHUB_EVENT_NUMBER:-${ISSUE_NUMBER}}"
+COMMENT_BODY="${GITHUB_EVENT_COMMENT_BODY:-${COMMENT_BODY}}"
+ISSUE_TITLE="${GITHUB_EVENT_ISSUE_TITLE:-${ISSUE_TITLE}}"
+ISSUE_BODY="${GITHUB_EVENT_ISSUE_BODY:-${ISSUE_BODY}}"
+COMMENT_ID="${GITHUB_EVENT_COMMENT_ID:-${COMMENT_ID}}"
+REPO_URL="https://github.com/${GITHUB_REPOSITORY}.git"
+
+# Validate required GitHub context
+if [ -z "$GITHUB_REPOSITORY" ] || [ -z "$ISSUE_NUMBER" ] || [ -z "$COMMENT_BODY" ] || [ -z "$COMMENT_ID" ]; then
+    log "❌ Missing required GitHub context: GITHUB_REPOSITORY, ISSUE_NUMBER, COMMENT_BODY, or COMMENT_ID"
+    exit 1
 fi
 
-# Set up API keys for SWE-Agent
-# Export all API keys to environment - LiteLLM will automatically pick the right one based on model name
-export OPENAI_API_KEY="${OPENAI_API_KEY:-${LLM_API_KEY}}"
-export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-${LLM_API_KEY}}"
-export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY}"
-export OPENROUTER_API_KEY="${OPENROUTER_API_KEY}"
-export GEMINI_API_KEY="${GEMINI_API_KEY}"
-# Gemini also needs GOOGLE_API_KEY for LiteLLM compatibility
-export GOOGLE_API_KEY="${GEMINI_API_KEY}"
+log "📝 Processing issue #${ISSUE_NUMBER} in ${GITHUB_REPOSITORY}"
+log "💬 Comment body: ${COMMENT_BODY:0:100}..." # Show first 100 chars
 
-# Additional environment variables that some providers might need
-export CLAUDE_API_KEY="${ANTHROPIC_API_KEY}"  # Some configurations use CLAUDE_API_KEY
-export GOOGLE_APPLICATION_CREDENTIALS="${GOOGLE_APPLICATION_CREDENTIALS:-}"  # For service account auth
+# --- Intent Detection and Routing ---
+log "🔍 Detecting request intent..."
 
-# Additional LiteLLM compatibility environment variables
-export VERTEX_AI_PROJECT="${VERTEX_AI_PROJECT:-}"
-export VERTEX_AI_LOCATION="${VERTEX_AI_LOCATION:-}"
-export COHERE_API_KEY="${COHERE_API_KEY:-}"
-export REPLICATE_API_TOKEN="${REPLICATE_API_TOKEN:-}"
+# Detect intent based on comment content
+DETECTED_INTENT=$(detect_request_intent "$COMMENT_BODY")
+log "🎯 Detected intent: $DETECTED_INTENT"
 
-# Log which API keys are configured (without revealing the actual keys)
+# Determine final response mode
+FINAL_RESPONSE_MODE="$RESPONSE_MODE"
+if [ "$RESPONSE_MODE" = "auto" ]; then
+    FINAL_RESPONSE_MODE="$DETECTED_INTENT"
+fi
+
+log "⚙️ Final response mode: $FINAL_RESPONSE_MODE"
+
+# Create initial progress comment
+PROGRESS_COMMENT_ID=$(post_comment "🔄 **SWE-Agent is analyzing your request...**
+
+**Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
+**Request Type:** ${FINAL_RESPONSE_MODE}
+**Model:** ${MODEL_NAME}
+
+⏳ Setting up environment and determining the best approach...")
+
+# Add initial reaction based on intent
+case "$FINAL_RESPONSE_MODE" in
+    "opinion")
+        add_contextual_reaction "success_opinion"
+        ;;
+    "analysis") 
+        add_contextual_reaction "analyzing"
+        ;;
+    "visual")
+        add_contextual_reaction "success_visual"
+        ;;
+    *)
+        add_contextual_reaction "processing"
+        ;;
+esac
+
+# Route to appropriate handler based on response mode
+if [ "$FINAL_RESPONSE_MODE" != "patch" ]; then
+    log "🚀 Using lightweight processing for ${FINAL_RESPONSE_MODE} request"
+    
+    # Handle non-patch requests with lightweight AI processing
+    result=$(handle_non_patch_request "$FINAL_RESPONSE_MODE" "$COMMENT_BODY" "$ISSUE_TITLE" "$ISSUE_BODY" "$ISSUE_NUMBER" "$MODEL_NAME")
+    
+    if [ $? -eq 0 ] && [ -n "$result" ]; then
+        # Format the response according to intent
+        formatted_response=$(format_response_by_intent "$FINAL_RESPONSE_MODE" "$result" "$ISSUE_NUMBER" "$ISSUE_TITLE" "$MODEL_NAME" "$(date)")
+        
+        # Update progress comment with final result
+        if [ -n "$PROGRESS_COMMENT_ID" ]; then
+            update_comment "$PROGRESS_COMMENT_ID" "$formatted_response"
+        else
+            post_comment "$formatted_response"
+        fi
+        
+        # Add success reaction
+        case "$FINAL_RESPONSE_MODE" in
+            "opinion")
+                add_contextual_reaction "success_opinion"
+                ;;
+            "analysis")
+                add_contextual_reaction "success"
+                ;;
+            "visual")
+                add_contextual_reaction "success_visual"
+                ;;
+        esac
+        
+        log "✅ ${FINAL_RESPONSE_MODE} response completed successfully"
+        exit 0
+    else
+        log "❌ Failed to generate ${FINAL_RESPONSE_MODE} response"
+        post_comment "❌ Failed to generate ${FINAL_RESPONSE_MODE} response. Please try again or rephrase your request."
+        add_contextual_reaction "general_error"
+        exit 1
+    fi
+fi
+
+log "🔧 Proceeding with full SWE-Agent patch generation..."
+
 API_KEYS_CONFIGURED=()
 [ -n "$OPENAI_API_KEY" ] && API_KEYS_CONFIGURED+=("OpenAI")
 [ -n "$ANTHROPIC_API_KEY" ] && API_KEYS_CONFIGURED+=("Anthropic") 
@@ -711,6 +1112,7 @@ The analysis took longer than expected and was stopped as a safety measure.
 2. **Include file names and line numbers**
 3. **Provide error messages or stack traces**
 4. **Describe expected vs actual behavior**
+5. **Mention any recent changes that might be related**
 
 </details>
 

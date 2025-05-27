@@ -41,6 +41,22 @@ inputs:
     description: 'Whether to wait for any running build-and-push workflows to complete'
     required: false
     default: 'true'
+  response_mode:
+    description: 'Response mode: "auto" (detect intent), "patch" (force patch generation), "analysis" (analysis only), "opinion" (opinion/advice only)'
+    required: false
+    default: 'auto'
+  enable_visual_content:
+    description: 'Whether to enable generation of visual content (charts, plots, diagrams)'
+    required: false
+    default: 'true'
+  visual_content_format:
+    description: 'Preferred format for visual content: "mermaid", "ascii", "code", "all"'
+    required: false
+    default: 'all'
+  max_comment_length:
+    description: 'Maximum length for response comments (default: 65536)'
+    required: false
+    default: '65536'
 
 outputs:
   patch_generated:
@@ -114,6 +130,11 @@ runs:
         INPUT_GEMINI_API_KEY: ${{ inputs.gemini_api_key }}
         INPUT_MODEL_NAME: ${{ inputs.model_name }}
         INPUT_TIMEOUT_MINUTES: ${{ inputs.timeout_minutes }}
+        # New environment variables for enhanced modes
+        INPUT_RESPONSE_MODE: ${{ inputs.response_mode }}
+        INPUT_ENABLE_VISUAL_CONTENT: ${{ inputs.enable_visual_content }}
+        INPUT_VISUAL_CONTENT_FORMAT: ${{ inputs.visual_content_format }}
+        INPUT_MAX_COMMENT_LENGTH: ${{ inputs.max_comment_length }}
 
 branding:
   icon: 'cpu'
