@@ -1,13 +1,28 @@
-FROM python:3.12-slim
+# Use Ubuntu 22.04 which has a complete Git installation
+FROM ubuntu:22.04
 
-# Install required system packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install Git, Python, and other dependencies
+RUN apt-get update && apt-get install -y \
     git \
+    git-lfs \
+    python3 \
+    python3-pip \
+    python3-venv \
     jq \
     curl \
     build-essential \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    ca-certificates \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create python/python3 symlink for compatibility
+RUN ln -sf /usr/bin/python3 /usr/bin/python
+
+# Verify Git installation and version (should support --cached option)
+RUN git --version && \
+    git diff --help | grep -q "cached" && \
+    echo "✅ Git supports --cached option" && \
+    git config --global --add safe.directory '*'
 
 # Set working directory
 WORKDIR /app
