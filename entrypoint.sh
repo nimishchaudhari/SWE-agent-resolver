@@ -110,14 +110,27 @@ process_patch_intent() {
     
     # Execute SWE-Agent
     log "🤖 Executing SWE-Agent..."
-    execute_swe_agent "$TEMP_DIR" "$problem_statement_file" "$MODEL_NAME" || {
-        log "❌ SWE-Agent execution failed"
-        return 1
-    }
+    local repo_dir="${GITHUB_WORKSPACE:-/github/workspace}"
+    log "📁 Using repository directory: $repo_dir"
     
-    # Process results
-    process_swe_agent_results "$TEMP_DIR"
-    return $?
+    # Execute SWE-Agent and capture exit code
+    local start_time=$(date +%s)
+    execute_swe_agent "$MODEL_NAME" "$repo_dir" "$problem_statement_file" "$TEMP_DIR"
+    local swe_exit_code=$?
+    local end_time=$(date +%s)
+    local execution_time=$((end_time - start_time))
+    
+    # Process results using the comprehensive function from swe_agent.sh
+    local result_message=$(process_swe_agent_results "$swe_exit_code" "$TEMP_DIR" "$execution_time")
+    if [ $swe_exit_code -eq 0 ]; then
+        post_comment "$result_message"
+        add_contextual_reaction "success_patch"
+    else
+        post_comment "$result_message"
+        add_contextual_reaction "general_error"
+    fi
+    
+    return $swe_exit_code
 }
 
 process_analysis_intent() {
@@ -188,37 +201,7 @@ process_pr_review_intent() {
 }
 
 # --- Result Processing ---
-
-process_swe_agent_results() {
-    local output_dir="$1"
-    
-    # Check for patch file
-    local patch_file="$output_dir/patch.patch"
-    if [ -f "$patch_file" ]; then
-        log "✅ Patch file found, processing..."
-        
-        # Read patch content
-        local patch_content=$(cat "$patch_file")
-        
-        # Set output for GitHub Actions
-        if [ "$GITHUB_ACTIONS" = "true" ]; then
-            echo "patch_generated=true" >> $GITHUB_OUTPUT
-            echo "patch_content<<EOF" >> $GITHUB_OUTPUT
-            echo "$patch_content" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-        fi
-        
-        # Format and post response
-        local formatted_response=$(format_patch_response "$patch_content")
-        post_comment "$formatted_response"
-        add_contextual_reaction "success_patch"
-        
-        return 0
-    else
-        log "❌ No patch file generated"
-        return 1
-    fi
-}
+# Using process_swe_agent_results from swe_agent.sh module
 
 handle_success_completion() {
     local execution_time="$1"
