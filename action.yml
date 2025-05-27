@@ -37,6 +37,10 @@ inputs:
     description: 'Maximum time in minutes to run SWE-agent (default: 30)'
     required: false
     default: '30'
+  wait_for_build:
+    description: 'Whether to wait for any running build-and-push workflows to complete'
+    required: false
+    default: 'true'
 
 outputs:
   patch_generated:
@@ -47,8 +51,69 @@ outputs:
     description: 'Time taken for execution'
 
 runs:
-  using: 'docker'
-  image: 'docker://ghcr.io/nimishchaudhari/swe-agent-resolver:latest'
+  using: 'composite'
+  steps:
+    - name: Wait for build-and-push to complete
+      if: inputs.wait_for_build == 'true'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      run: |
+        echo "🔍 Checking for running build-and-push workflows..."
+        
+        # Function to check for running workflows
+        check_running_builds() {
+          local running_workflows=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${{ github.repository }}/actions/runs" \
+            --jq '.workflow_runs[] | select(.status == "in_progress" and (.name == "Build and Cache Docker Image" or .workflow_id == "build-docker-image.yml")) | .id')
+          
+          echo "$running_workflows"
+        }
+        
+        # Wait for any running build workflows to complete
+        max_wait_time=1800  # 30 minutes max wait
+        wait_interval=30    # Check every 30 seconds
+        elapsed_time=0
+        
+        while [ $elapsed_time -lt $max_wait_time ]; do
+          running_builds=$(check_running_builds)
+          
+          if [ -z "$running_builds" ]; then
+            echo "✅ No build-and-push workflows are currently running."
+            break
+          fi
+          
+          echo "⏳ Found running build workflows: $running_builds"
+          echo "   Waiting ${wait_interval} seconds before checking again..."
+          echo "   Elapsed time: ${elapsed_time}/${max_wait_time} seconds"
+          
+          sleep $wait_interval
+          elapsed_time=$((elapsed_time + wait_interval))
+        done
+        
+        if [ $elapsed_time -ge $max_wait_time ]; then
+          echo "⚠️ Timeout reached while waiting for build workflows. Proceeding anyway..."
+        else
+          echo "✅ All build workflows completed. Proceeding with latest image."
+          # Give a small buffer for image registry propagation
+          sleep 10
+        fi
+
+    - name: Run SWE-Agent
+      uses: docker://ghcr.io/nimishchaudhari/swe-agent-resolver:latest
+      env:
+        INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
+        INPUT_TRIGGER_PHRASE: ${{ inputs.trigger_phrase }}
+        INPUT_LLM_API_KEY: ${{ inputs.llm_api_key }}
+        INPUT_OPENAI_API_KEY: ${{ inputs.openai_api_key }}
+        INPUT_ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        INPUT_DEEPSEEK_API_KEY: ${{ inputs.deepseek_api_key }}
+        INPUT_OPENROUTER_API_KEY: ${{ inputs.openrouter_api_key }}
+        INPUT_GEMINI_API_KEY: ${{ inputs.gemini_api_key }}
+        INPUT_MODEL_NAME: ${{ inputs.model_name }}
+        INPUT_TIMEOUT_MINUTES: ${{ inputs.timeout_minutes }}
 
 branding:
   icon: 'cpu'
