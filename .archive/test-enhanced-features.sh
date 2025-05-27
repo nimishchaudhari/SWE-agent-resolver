@@ -37,13 +37,17 @@ run_test() {
 test_intent_detection() {
     local comment="$1"
     local expected="$2"
+    local context_mode="${3:-unknown}"
     
     # Convert to lowercase for case-insensitive matching
     local lower_comment=$(echo "$comment" | tr '[:upper:]' '[:lower:]')
     local intent="patch"  # default
     
-    # Visual content keywords (highest priority)
-    if [[ "$lower_comment" =~ (chart|plot|graph|diagram|visualize|visualization|picture|image|screenshot|draw|show.*me.*visual) ]]; then
+    # PR Review specific keywords (highest priority for PR contexts)
+    if [[ "$context_mode" =~ ^pr_ ]] && [[ "$lower_comment" =~ (review|lgtm|approve|request.*change|block|nitpick|style|lint|test.*coverage|security.*check|performance.*review|code.*quality|merge.*safe|breaking.*change|backward.*compat) ]]; then
+        intent="pr_review"
+    # Visual content keywords (high priority)
+    elif [[ "$lower_comment" =~ (chart|plot|graph|diagram|visualize|visualization|picture|image|screenshot|draw|show.*me.*visual) ]]; then
         intent="visual"
     # Analysis keywords (second priority)
     elif [[ "$lower_comment" =~ (analyze|analysis|explain|understand|investigate|examine|review|assess|evaluate|why|how.*work|what.*happen) ]]; then
@@ -67,11 +71,37 @@ test_intent_detection() {
     fi
 }
 
+# Helper function for testing PR review intent detection with context
+test_pr_review_intent() {
+    local comment="$1"
+    local expected="$2"
+    local context="pr_review"
+    
+    test_intent_detection "$comment" "$expected" "$context"
+}
+
 # Comprehensive intent detection tests
 run_test "Basic Opinion Detection" "test_intent_detection 'What do you think about this approach?' 'opinion'"
 run_test "Basic Analysis Detection" "test_intent_detection 'Can you analyze this code structure?' 'analysis'"
 run_test "Basic Visual Detection" "test_intent_detection 'Please create a diagram showing the data flow' 'visual'"
 run_test "Basic Patch Detection" "test_intent_detection 'Fix this bug in the authentication system' 'patch'"
+
+# PR Review specific tests
+run_test "PR Review Detection - Review" "test_pr_review_intent 'Please review this pull request for security' 'pr_review'"
+run_test "PR Review Detection - LGTM" "test_pr_review_intent 'LGTM - looks good to merge' 'pr_review'"
+run_test "PR Review Detection - Approve" "test_pr_review_intent 'I approve this change with minor suggestions' 'pr_review'"
+run_test "PR Review Detection - Request Changes" "test_pr_review_intent 'Please request changes for the security issues' 'pr_review'"
+run_test "PR Review Detection - Code Quality" "test_pr_review_intent 'Check the code quality and style' 'pr_review'"
+run_test "PR Review Detection - Performance Review" "test_pr_review_intent 'Performance review needed for these database changes' 'pr_review'"
+run_test "PR Review Detection - Security Check" "test_pr_review_intent 'Security check required before merge' 'pr_review'"
+run_test "PR Review Detection - Test Coverage" "test_pr_review_intent 'Verify test coverage is adequate' 'pr_review'"
+run_test "PR Review Detection - Breaking Changes" "test_pr_review_intent 'Check for breaking changes and backward compatibility' 'pr_review'"
+run_test "PR Review Detection - Merge Safe" "test_pr_review_intent 'Is this merge safe for production?' 'pr_review'"
+
+# Context-specific behavior tests
+run_test "Analysis in PR Context" "test_intent_detection 'Analyze this code structure' 'analysis' 'pr_comment'"
+run_test "Review in Issue Context" "test_intent_detection 'Please review this approach' 'analysis' 'issue_comment'"
+run_test "Review in PR Context" "test_pr_review_intent 'Please review this approach' 'pr_review'"
 
 # Edge case tests
 run_test "Mixed Case Handling" "test_intent_detection 'What Do You THINK about this APPROACH?' 'opinion'"

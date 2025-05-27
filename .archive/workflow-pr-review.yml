@@ -1,0 +1,163 @@
+name: SWE-Agent PR Review
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  swe-agent-pr-review:
+    if: |
+      (github.event_name == 'issue_comment' && 
+       contains(github.event.comment.body, '@swe-agent') && 
+       github.event.issue.pull_request) ||
+      (github.event_name == 'pull_request_review' && 
+       contains(github.event.review.body, '@swe-agent')) ||
+      (github.event_name == 'pull_request_review_comment' && 
+       contains(github.event.comment.body, '@swe-agent'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: SWE-Agent PR Review
+        uses: nimishchaudhari/swe-agent-resolver@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model_name: 'gpt-4o'
+          response_mode: 'auto'
+          enable_visual_content: 'true'
+          max_comment_length: '65536'
+          # PR Review specific configurations
+          enable_pr_review: 'true'
+          review_focus: 'comprehensive'  # options: security, performance, quality, comprehensive
+          merge_safety_check: 'true'
+          breaking_change_detection: 'true'
+
+---
+# Example Usage in Pull Requests
+
+## Basic PR Review Commands
+
+### General Review Request
+```
+@swe-agent Please review this pull request
+```
+
+### Security-Focused Review
+```
+@swe-agent Security review needed - check for vulnerabilities and best practices
+```
+
+### Performance Review
+```
+@swe-agent Can you assess the performance impact of these database changes?
+```
+
+### Code Quality Review
+```
+@swe-agent Review this refactoring for maintainability and design patterns
+```
+
+### Comprehensive Review
+```
+@swe-agent Full review - security, performance, tests, and merge safety
+```
+
+### Style and Standards
+```
+@swe-agent Nitpick review for coding standards and style consistency
+```
+
+### Breaking Changes Check
+```
+@swe-agent Check for breaking changes and backward compatibility
+```
+
+### Test Coverage Assessment
+```
+@swe-agent Verify test coverage and edge case handling
+```
+
+## Advanced PR Review Examples
+
+### Multi-Area Review
+```
+@swe-agent Comprehensive review covering:
+- Security vulnerabilities
+- Performance implications  
+- Test coverage completeness
+- Architecture consistency
+- Merge safety assessment
+```
+
+### Specific Technology Review
+```
+@swe-agent Review this React component for:
+- Performance optimizations
+- Accessibility compliance
+- Best practices adherence
+- Potential re-rendering issues
+```
+
+### Database Changes Review
+```
+@swe-agent Review database migration for:
+- Data integrity preservation
+- Performance impact on queries
+- Rollback strategy safety
+- Index optimization
+```
+
+### API Changes Review
+```
+@swe-agent Review API changes for:
+- Backward compatibility
+- Breaking changes detection
+- Security implications
+- Documentation updates needed
+```
+
+## Expected Review Response Format
+
+The SWE-Agent will provide:
+
+1. **📋 Pull Request Review Summary**
+   - Overview of changes and impact
+   - Key areas of concern or approval
+
+2. **🔍 Code Quality Assessment**
+   - Architecture & Design: ✅/⚠️/❌
+   - Security & Safety: ✅/⚠️/❌
+   - Performance & Efficiency: ✅/⚠️/❌
+   - Testing & Coverage: ✅/⚠️/❌
+
+3. **🎯 Review Recommendations**
+   - ✅ **Approved Changes**: What looks good
+   - ⚠️ **Suggested Improvements**: Nice-to-have enhancements
+   - ❌ **Required Changes**: Must-fix issues
+
+4. **🚀 Merge Recommendation**
+   - Overall assessment (Approved/Approved with Suggestions/Changes Requested)
+   - Specific next steps and requirements
+
+## Integration with GitHub Review System
+
+This workflow integrates with GitHub's native PR review system:
+- Comments on PR conversations
+- Responds to review comments
+- Works with PR review submissions
+- Provides reactions and status updates
+
+## Best Practices
+
+1. **Use specific keywords** for targeted reviews
+2. **Request focused reviews** for faster responses
+3. **Combine with human reviews** for critical changes
+4. **Review the AI feedback** before implementing suggestions
+5. **Use for educational purposes** to learn best practices

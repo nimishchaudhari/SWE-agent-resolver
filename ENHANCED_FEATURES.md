@@ -7,6 +7,7 @@ The SWE-Agent has been enhanced to support comment-based opinion/analysis respon
 - **Opinions & Advice**: Get expert recommendations and best practices
 - **Technical Analysis**: Receive detailed code and architectural analysis  
 - **Visual Content**: Generate diagrams, charts, and visual representations
+- **Pull Request Reviews**: Comprehensive PR analysis with merge recommendations
 - **Traditional Patches**: Continue using full SWE-Agent for code fixes
 
 ## 🎯 Request Types & Triggers
@@ -44,6 +45,18 @@ The SWE-Agent has been enhanced to support comment-based opinion/analysis respon
 @swe-agent Visualize the database schema relationships
 ```
 
+### Pull Request Review Requests
+**Triggers:** `review`, `lgtm`, `approve`, `request changes`, `block`, `nitpick`, `style`, `lint`, `test coverage`, `security check`, `performance review`, `code quality`, `merge safe`, `breaking change`, `backward compat`
+
+**Examples:**
+```
+@swe-agent Please review this pull request for security issues
+@swe-agent Can you check the code quality and suggest improvements?
+@swe-agent Review for performance implications and breaking changes
+@swe-agent Assess test coverage and merge safety
+@swe-agent Nitpick: any style or lint issues?
+```
+
 ### Traditional Patch Requests
 **Triggers:** `fix`, `patch`, `solve`, `resolve`, `implement`, `code`, `bug`, `error`, `issue`
 
@@ -64,6 +77,7 @@ Controls the response behavior:
 - `patch`: Force traditional patch generation
 - `opinion`: Force opinion/advisory response only
 - `analysis`: Force technical analysis response only
+- `pr_review`: Force pull request review response only
 
 #### `enable_visual_content`
 - `true` (default): Enable visual content generation
@@ -225,12 +239,51 @@ For opinion/analysis requests, the agent uses lightweight API calls instead of t
 *📊 SWE-Agent using gpt-4o • Visual content generated*
 ```
 
+### Pull Request Review Template
+```markdown
+🔍 **SWE-Agent Pull Request Review**
+
+**Pull Request:** #123 - Your PR Title
+**Model:** gpt-4o
+**Review Type:** Comprehensive PR Analysis
+
+## 📋 Pull Request Review Summary
+[Overall assessment of the changes]
+
+## 🔍 Code Quality Assessment
+**Architecture & Design:** ✅/⚠️/❌
+**Security & Safety:** ✅/⚠️/❌  
+**Performance & Efficiency:** ✅/⚠️/❌
+**Testing & Coverage:** ✅/⚠️/❌
+
+## 🎯 Review Recommendations
+
+### ✅ **Approved Changes**
+[What looks good]
+
+### ⚠️ **Suggested Improvements** 
+[Nice-to-have improvements]
+
+### ❌ **Required Changes**
+[Must-fix issues]
+
+## 🚀 Merge Recommendation
+**Overall Assessment:** ✅ APPROVED / ⚠️ APPROVED WITH SUGGESTIONS / ❌ CHANGES REQUESTED
+
+---
+*🔍 SWE-Agent using gpt-4o • PR review complete*
+```
+
 ## 🎭 Enhanced Reactions
 
 The agent now provides context-aware reactions:
 - 💡 (`bulb`) for opinion responses
 - 🔍 (`mag`) for analysis responses  
 - 📊 (`chart_with_upwards_trend`) for visual content
+- ✅ (`white_check_mark`) for PR reviews
+- ✅ (`heavy_check_mark`) for approved PRs
+- ❌ (`x`) for PRs requiring changes
+- 👀 (`eyes`) for PR suggestions
 - 🚀 (`rocket`) for successful patches
 - ⚠️ (`warning`) for API errors
 
@@ -249,6 +302,70 @@ The system uses intelligent keyword matching to detect user intent:
 - "Analyze the performance of this database query" → Analysis  
 - "Show me a diagram of the API architecture" → Visual
 - "Fix the bug in the authentication system" → Patch
+
+## 🔍 Pull Request Review Capabilities
+
+### Comprehensive Review Areas
+
+**Code Quality Assessment:**
+- Architecture and design patterns
+- Code readability and maintainability
+- Consistency with codebase standards
+- Proper error handling implementation
+
+**Security Analysis:**
+- Input validation checks
+- Authentication and authorization
+- Data exposure risks
+- Vulnerability assessments
+
+**Performance Evaluation:**
+- Algorithm efficiency analysis
+- Resource usage optimization
+- Scalability considerations
+- Performance regression detection
+
+**Testing Coverage:**
+- Unit test completeness
+- Integration test coverage
+- Edge case handling
+- Test quality assessment
+
+### PR Review Examples
+
+**Security-Focused Review:**
+```
+@swe-agent Please review this authentication PR for security vulnerabilities and best practices
+```
+
+**Performance Review:**
+```
+@swe-agent Can you assess the performance impact of these database changes?
+```
+
+**Code Quality Review:**
+```
+@swe-agent Review this refactoring PR for maintainability and design patterns
+```
+
+**Comprehensive Review:**
+```
+@swe-agent Full review needed - check security, performance, tests, and merge safety
+```
+
+**Style and Standards:**
+```
+@swe-agent Nitpick review for coding standards and style consistency
+```
+
+### Merge Safety Assessment
+
+The PR review feature provides merge recommendations based on:
+- **Breaking changes** detection
+- **Backward compatibility** analysis
+- **Test coverage** requirements
+- **Security implications** evaluation
+- **Performance impact** assessment
 
 ## 🚦 Error Handling
 

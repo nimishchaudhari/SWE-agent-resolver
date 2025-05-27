@@ -1,0 +1,408 @@
+name: SWE-Agent AIO Resolver (All-In-One)
+
+on:
+  # Support for issue comments (original functionality)
+  issue_comment:
+    types: [created]
+  # Support for PR review comments
+  pull_request_review_comment:
+    types: [created]
+  # Support for PR reviews
+  pull_request_review:
+    types: [submitted]
+  # Support for PR comments
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  issues: write
+  contents: write
+  pull-requests: write
+  checks: write
+
+jobs:
+  swe-agent-aio:
+    name: SWE-Agent All-In-One Resolver
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@swe-agent')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@swe-agent')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@swe-agent')) ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.body, '@swe-agent'))
+    
+    steps:
+      - name: 🔍 Detect Context and Initialize
+        id: context-detection
+        shell: bash
+        run: |
+          echo "🔍 Detecting context for SWE-Agent AIO..."
+          echo "Event: ${{ github.event_name }}"
+          echo "Actor: ${{ github.actor }}"
+          
+          # Detect context type and extract relevant information
+          if [ "${{ github.event_name }}" = "pull_request_review" ]; then
+            echo "context_type=pr_review" >> $GITHUB_OUTPUT
+            echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "comment_body=${{ github.event.review.body }}" >> $GITHUB_OUTPUT
+            echo "issue_title=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
+            echo "issue_body=${{ github.event.pull_request.body }}" >> $GITHUB_OUTPUT
+            echo "comment_id=${{ github.event.review.id }}" >> $GITHUB_OUTPUT
+            echo "📝 Context: PR Review"
+          elif [ "${{ github.event_name }}" = "pull_request_review_comment" ]; then
+            echo "context_type=pr_review_comment" >> $GITHUB_OUTPUT
+            echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "comment_body=${{ github.event.comment.body }}" >> $GITHUB_OUTPUT
+            echo "issue_title=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
+            echo "issue_body=${{ github.event.pull_request.body }}" >> $GITHUB_OUTPUT
+            echo "comment_id=${{ github.event.comment.id }}" >> $GITHUB_OUTPUT
+            echo "📝 Context: PR Review Comment"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "context_type=pr_comment" >> $GITHUB_OUTPUT
+            echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "comment_body=${{ github.event.pull_request.body }}" >> $GITHUB_OUTPUT
+            echo "issue_title=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
+            echo "issue_body=${{ github.event.pull_request.body }}" >> $GITHUB_OUTPUT
+            echo "comment_id=" >> $GITHUB_OUTPUT
+            echo "📝 Context: PR Body"
+          elif [ "${{ github.event_name }}" = "issue_comment" ]; then
+            if [ -n "${{ github.event.issue.pull_request.url }}" ]; then
+              echo "context_type=pr_comment" >> $GITHUB_OUTPUT
+              echo "pr_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+            else
+              echo "context_type=issue_comment" >> $GITHUB_OUTPUT
+              echo "issue_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+            fi
+            echo "comment_body=${{ github.event.comment.body }}" >> $GITHUB_OUTPUT
+            echo "issue_title=${{ github.event.issue.title }}" >> $GITHUB_OUTPUT
+            echo "issue_body=${{ github.event.issue.body }}" >> $GITHUB_OUTPUT
+            echo "comment_id=${{ github.event.comment.id }}" >> $GITHUB_OUTPUT
+            echo "📝 Context: Issue Comment"
+          fi
+          
+          echo "✅ Context detection complete"
+
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: 🤖 Run SWE-Agent with Enhanced Features
+        id: swe-agent
+        uses: nimishchaudhari/swe-agent-resolver@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          model_name: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}
+          
+          # Multi-context configuration
+          context_mode: 'auto'                    # Auto-detect context
+          pr_strategy: 'continue'                 # Continue existing PRs
+          git_reference_mode: 'auto'              # Context-based Git refs
+          enable_review_context: 'true'           # Handle review comments
+          target_branch_strategy: 'auto'          # Context-based branching
+          
+          # Enhanced response modes
+          response_mode: 'auto'                   # Auto-detect intent (patch/opinion/analysis/visual/pr_review)
+          enable_visual_content: 'true'          # Enable visual responses
+          visual_content_format: 'all'           # All visual formats
+          max_comment_length: '65536'            # Maximum response length
+          
+          # Performance tuning
+          timeout_seconds: '3000'                # 50 minutes max execution
+          
+        env:
+          # Pass context information to the resolver
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_EVENT_NUMBER: ${{ steps.context-detection.outputs.pr_number || steps.context-detection.outputs.issue_number }}
+          GITHUB_EVENT_COMMENT_BODY: ${{ steps.context-detection.outputs.comment_body }}
+          GITHUB_EVENT_ISSUE_TITLE: ${{ steps.context-detection.outputs.issue_title }}
+          GITHUB_EVENT_ISSUE_BODY: ${{ steps.context-detection.outputs.issue_body }}
+          GITHUB_EVENT_COMMENT_ID: ${{ steps.context-detection.outputs.comment_id }}
+          FINAL_CONTEXT_MODE: ${{ steps.context-detection.outputs.context_type }}
+
+      - name: 🔄 Handle PR Context (Apply to Existing PR)
+        if: |
+          always() && 
+          steps.swe-agent.outcome == 'success' &&
+          (steps.context-detection.outputs.context_type == 'pr_comment' || 
+           steps.context-detection.outputs.context_type == 'pr_review' ||
+           steps.context-detection.outputs.context_type == 'pr_review_comment') &&
+          steps.swe-agent.outputs.patch_generated == 'true'
+        shell: bash
+        env:
+          PATCH_CONTENT: ${{ steps.swe-agent.outputs.patch_content }}
+          PR_NUMBER: ${{ steps.context-detection.outputs.pr_number }}
+          MODEL_NAME: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}
+          EXECUTION_TIME: ${{ steps.swe-agent.outputs.execution_time }}
+          COMMENT_ID: ${{ steps.context-detection.outputs.comment_id }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          
+          echo "🔄 Applying patch to existing PR #${PR_NUMBER}..."
+          
+          # Get PR information
+          PR_DATA=$(gh api repos/${{ github.repository }}/pulls/${PR_NUMBER})
+          PR_HEAD_REF=$(echo "$PR_DATA" | jq -r '.head.ref')
+          PR_TITLE=$(echo "$PR_DATA" | jq -r '.title')
+          
+          echo "📋 PR Info: $PR_TITLE (branch: $PR_HEAD_REF)"
+          
+          # Configure git
+          git config --global user.name "swe-agent-bot[bot]"
+          git config --global user.email "swe-agent-bot[bot]@users.noreply.github.com"
+          
+          # Checkout PR branch
+          echo "🔄 Switching to PR branch..."
+          git fetch origin "$PR_HEAD_REF:$PR_HEAD_REF"
+          git checkout "$PR_HEAD_REF"
+          
+          # Apply patch
+          echo "🔧 Applying SWE-Agent patch..."
+          echo "$PATCH_CONTENT" > /tmp/swe_agent_fix.patch
+          
+          if git apply --check /tmp/swe_agent_fix.patch; then
+            git apply /tmp/swe_agent_fix.patch
+            
+            # Commit changes
+            git add -A
+            git commit -m "🤖 SWE-Agent: Enhance PR based on feedback
+
+Applied fixes using ${MODEL_NAME}
+Execution time: ${EXECUTION_TIME}
+
+Co-authored-by: swe-agent-bot[bot] <swe-agent-bot[bot]@users.noreply.github.com>"
+            
+            # Push changes
+            echo "⬆️ Pushing changes to PR branch..."
+            git push origin "$PR_HEAD_REF"
+            
+            # Update comment if we have a comment ID
+            if [ -n "$COMMENT_ID" ] && [ "$COMMENT_ID" != "" ]; then
+              echo "💬 Updating comment with success message..."
+              gh api repos/${{ github.repository }}/issues/comments/$COMMENT_ID \
+                --method PATCH \
+                --field body="✅ **PR Enhanced Successfully!** 
+
+🔄 Applied SWE-Agent fixes to this Pull Request.
+
+**Changes applied:**
+- Enhanced based on review feedback
+- Used model: ${MODEL_NAME}
+- Execution time: ${EXECUTION_TIME}
+
+The PR branch \`${PR_HEAD_REF}\` has been updated with the improvements. 🚀"
+            else
+              echo "💬 Posting success comment to PR..."
+              gh api repos/${{ github.repository }}/issues/${PR_NUMBER}/comments \
+                --method POST \
+                --field body="✅ **PR Enhanced by SWE-Agent!** 
+
+🔄 Applied automated fixes to this Pull Request.
+
+**Changes applied:**
+- Enhanced based on feedback
+- Used model: ${MODEL_NAME}
+- Execution time: ${EXECUTION_TIME}
+
+The PR branch \`${PR_HEAD_REF}\` has been updated with the improvements. 🚀"
+            fi
+            
+            echo "✅ PR enhancement complete!"
+            
+          else
+            echo "❌ Patch could not be applied cleanly - posting for manual review"
+            
+            # Post patch for manual review
+            if [ -n "$COMMENT_ID" ] && [ "$COMMENT_ID" != "" ]; then
+              gh api repos/${{ github.repository }}/issues/comments/$COMMENT_ID \
+                --method PATCH \
+                --field body="⚠️ **Patch Generated but Requires Manual Application**
+
+The SWE-Agent generated a fix, but it conflicts with recent changes in the PR.
+
+<details>
+<summary>📄 Click to view generated patch</summary>
+
+\`\`\`diff
+${PATCH_CONTENT}
+\`\`\`
+
+</details>
+
+Please apply this patch manually or resolve conflicts before merging."
+            else
+              gh api repos/${{ github.repository }}/issues/${PR_NUMBER}/comments \
+                --method POST \
+                --field body="⚠️ **Patch Generated but Requires Manual Application**
+
+The SWE-Agent generated a fix, but it conflicts with recent changes.
+
+<details>
+<summary>📄 Click to view generated patch</summary>
+
+\`\`\`diff
+${PATCH_CONTENT}
+\`\`\`
+
+</details>
+
+Please apply this patch manually or resolve conflicts."
+            fi
+            
+            exit 1
+          fi
+
+      - name: 🆕 Handle Issue Context (Create New PR)
+        if: |
+          always() && 
+          steps.swe-agent.outcome == 'success' &&
+          steps.context-detection.outputs.context_type == 'issue_comment' &&
+          steps.swe-agent.outputs.patch_generated == 'true'
+        shell: bash
+        env:
+          PATCH_CONTENT: ${{ steps.swe-agent.outputs.patch_content }}
+          ISSUE_NUMBER: ${{ steps.context-detection.outputs.issue_number }}
+          ISSUE_TITLE: ${{ steps.context-detection.outputs.issue_title }}
+          MODEL_NAME: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}
+          EXECUTION_TIME: ${{ steps.swe-agent.outputs.execution_time }}
+          COMMENT_ID: ${{ steps.context-detection.outputs.comment_id }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          
+          echo "🆕 Creating new PR for issue #${ISSUE_NUMBER}..."
+          
+          # Configure git
+          git config --global user.name "swe-agent-bot[bot]"
+          git config --global user.email "swe-agent-bot[bot]@users.noreply.github.com"
+          
+          # Create new branch
+          BRANCH_NAME="swe-agent-fix-issue-${ISSUE_NUMBER}-$(date +%s)"
+          echo "🌿 Creating branch: $BRANCH_NAME"
+          git checkout -b "$BRANCH_NAME"
+          
+          # Apply patch
+          echo "🔧 Applying SWE-Agent patch..."
+          echo "$PATCH_CONTENT" > /tmp/swe_agent_fix.patch
+          
+          if git apply --check /tmp/swe_agent_fix.patch; then
+            git apply /tmp/swe_agent_fix.patch
+            
+            # Commit changes
+            git add -A
+            git commit -m "🤖 Fix: $ISSUE_TITLE
+
+Resolves #${ISSUE_NUMBER}
+
+Applied automated fixes using ${MODEL_NAME}
+Execution time: ${EXECUTION_TIME}
+
+Co-authored-by: swe-agent-bot[bot] <swe-agent-bot[bot]@users.noreply.github.com>"
+            
+            # Push branch
+            echo "⬆️ Pushing new branch..."
+            git push origin "$BRANCH_NAME"
+            
+            # Create PR
+            DEFAULT_BRANCH=$(gh api repos/${{ github.repository }} --jq .default_branch)
+            PR_TITLE="🤖 Fix: $ISSUE_TITLE"
+            PR_BODY="## 🤖 Automated Fix by SWE-Agent
+
+This PR was automatically generated to resolve issue #${ISSUE_NUMBER}.
+
+### 📋 Changes Made
+- Applied automated fixes using ${MODEL_NAME}
+- Execution time: ${EXECUTION_TIME}
+
+### 🔗 Related Issue
+Fixes #${ISSUE_NUMBER}
+
+### 🚀 Generated Patch
+<details>
+<summary>📄 Click to view the applied patch</summary>
+
+\`\`\`diff
+${PATCH_CONTENT}
+\`\`\`
+
+</details>
+
+---
+*🤖 This PR was automatically created by SWE-Agent AIO Resolver*"
+            
+            echo "🔗 Creating pull request..."
+            PR_URL=$(gh pr create --title "$PR_TITLE" --body "$PR_BODY" --base "$DEFAULT_BRANCH" --head "$BRANCH_NAME")
+            
+            # Update issue comment
+            echo "💬 Updating issue comment with PR link..."
+            gh api repos/${{ github.repository }}/issues/comments/$COMMENT_ID \
+              --method PATCH \
+              --field body="✅ **Solution Generated & Pull Request Created!** 
+
+🆕 Created a new Pull Request to resolve this issue.
+
+**[View Pull Request](${PR_URL})**
+
+**Summary:**
+- Branch: \`${BRANCH_NAME}\`
+- Model: ${MODEL_NAME}
+- Execution time: ${EXECUTION_TIME}
+
+The PR is ready for review! 🚀"
+            
+            echo "✅ PR creation complete!"
+            
+          else
+            echo "❌ Patch could not be applied cleanly"
+            
+            # Update comment with error
+            gh api repos/${{ github.repository }}/issues/comments/$COMMENT_ID \
+              --method PATCH \
+              --field body="❌ **Patch Generation Failed**
+
+SWE-Agent generated a fix but encountered conflicts when trying to apply it.
+
+<details>
+<summary>📄 Click to view generated patch for manual application</summary>
+
+\`\`\`diff
+${PATCH_CONTENT}
+\`\`\`
+
+</details>
+
+Please review and apply the patch manually."
+            
+            exit 1
+          fi
+
+      - name: 📊 Post Execution Summary
+        if: always()
+        shell: bash
+        env:
+          CONTEXT_TYPE: ${{ steps.context-detection.outputs.context_type }}
+          EXECUTION_TIME: ${{ steps.swe-agent.outputs.execution_time }}
+          PATCH_GENERATED: ${{ steps.swe-agent.outputs.patch_generated }}
+          MODEL_NAME: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}
+        run: |
+          echo "📊 SWE-Agent AIO Execution Summary"
+          echo "=================================="
+          echo "🔍 Context Type: $CONTEXT_TYPE"
+          echo "⏱️ Execution Time: $EXECUTION_TIME"
+          echo "🔧 Patch Generated: $PATCH_GENERATED"
+          echo "🤖 Model Used: $MODEL_NAME"
+          echo "✅ AIO Workflow Complete"
+
+      - name: 🧹 Cleanup and Notifications
+        if: always()
+        shell: bash
+        run: |
+          echo "🧹 Cleaning up temporary files..."
+          rm -f /tmp/swe_agent_fix.patch
+          echo "🔔 SWE-Agent AIO workflow completed successfully!"

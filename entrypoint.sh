@@ -20,6 +20,13 @@ ENABLE_VISUAL_CONTENT="${INPUT_ENABLE_VISUAL_CONTENT:-true}"
 VISUAL_CONTENT_FORMAT="${INPUT_VISUAL_CONTENT_FORMAT:-all}"
 MAX_COMMENT_LENGTH="${INPUT_MAX_COMMENT_LENGTH:-65536}"
 
+# Multi-Context Support Configuration
+CONTEXT_MODE="${INPUT_CONTEXT_MODE:-auto}"
+PR_STRATEGY="${INPUT_PR_STRATEGY:-continue}"
+GIT_REFERENCE_MODE="${INPUT_GIT_REFERENCE_MODE:-auto}"
+ENABLE_REVIEW_CONTEXT="${INPUT_ENABLE_REVIEW_CONTEXT:-true}"
+TARGET_BRANCH_STRATEGY="${INPUT_TARGET_BRANCH_STRATEGY:-auto}"
+
 # GitHub API URL
 GITHUB_API_URL="${GITHUB_API_URL:-https://api.github.com}"
 
@@ -95,6 +102,18 @@ add_contextual_reaction() {
         "success_visual")
             reaction="chart_with_upwards_trend"
             ;;
+        "success_pr_review")
+            reaction="white_check_mark"
+            ;;
+        "pr_review_approved")
+            reaction="heavy_check_mark"
+            ;;
+        "pr_review_changes_requested")
+            reaction="x"
+            ;;
+        "pr_review_suggestions")
+            reaction="eyes"
+            ;;
         "timeout")
             reaction="hourglass_flowing_sand"
             ;;
@@ -112,6 +131,9 @@ add_contextual_reaction() {
             ;;
         "analyzing")
             reaction="mag"
+            ;;
+        "pr_reviewing")
+            reaction="mag_right"
             ;;
         *)
             reaction="thinking_face"
@@ -222,12 +244,16 @@ ${stage_emoji} **${message}**${details_section}
 detect_request_intent() {
     local comment="$1"
     local intent="patch"  # default
+    local context_mode="${FINAL_CONTEXT_MODE:-unknown}"
     
     # Convert to lowercase for case-insensitive matching
     local lower_comment=$(echo "$comment" | tr '[:upper:]' '[:lower:]')
     
-    # Visual content keywords (highest priority)
-    if [[ "$lower_comment" =~ (chart|plot|graph|diagram|visualize|visualization|picture|image|screenshot|draw|show.*me.*visual) ]]; then
+    # PR Review specific keywords (highest priority for PR contexts)
+    if [[ "$context_mode" =~ ^pr_ ]] && [[ "$lower_comment" =~ (review|lgtm|approve|request.*change|block|nitpick|style|lint|test.*coverage|security.*check|performance.*review|code.*quality|merge.*safe|breaking.*change|backward.*compat) ]]; then
+        intent="pr_review"
+    # Visual content keywords (high priority)
+    elif [[ "$lower_comment" =~ (chart|plot|graph|diagram|visualize|visualization|picture|image|screenshot|draw|show.*me.*visual) ]]; then
         intent="visual"
     # Analysis keywords (second priority)
     elif [[ "$lower_comment" =~ (analyze|analysis|explain|understand|investigate|examine|review|assess|evaluate|why|how.*work|what.*happen) ]]; then
@@ -277,13 +303,110 @@ format_response_by_intent() {
     local issue_title="$4"
     local model_name="$5"
     local execution_time="$6"
+    local context_type="${7:-${CONTEXT_TYPE:-unknown}}"
+    local context_mode="${8:-${FINAL_CONTEXT_MODE:-unknown}}"
+    
+    # Context-aware emoji and description
+    local context_emoji=""
+    local context_description=""
+    case "$context_mode" in
+        "pr_review"|"pr_review_comment")
+            context_emoji="🔍"
+            context_description="PR Review"
+            ;;
+        "pr_comment"|"pull_request")
+            context_emoji="🔄"
+            context_description="Pull Request"
+            ;;
+        "issue_comment")
+            context_emoji="📝"
+            context_description="Issue"
+            ;;
+        *)
+            context_emoji="🤖"
+            context_description="Request"
+            ;;
+    esac
     
     case "$intent" in
+        "pr_review")
+            cat << 'EOF'
+🔍 **SWE-Agent Pull Request Review**
+
+**${context_description}:** #${issue_number} - ${issue_title}
+**Context:** ${context_mode} (${context_type})
+**Model:** ${model_name}
+**Review Type:** Comprehensive PR Analysis
+**Review Time:** ${execution_time}
+
+## 📋 Pull Request Review Summary
+
+${content}
+
+## 🔍 Code Quality Assessment
+
+<details>
+<summary>📊 Click to view detailed code quality metrics</summary>
+
+**Architecture & Design:**
+- Code follows established patterns ✓/⚠️/❌
+- Proper separation of concerns ✓/⚠️/❌
+- Maintains consistency with codebase ✓/⚠️/❌
+
+**Security & Safety:**
+- No obvious security vulnerabilities ✓/⚠️/❌
+- Input validation present ✓/⚠️/❌
+- Error handling appropriate ✓/⚠️/❌
+
+**Performance & Efficiency:**
+- No performance regressions ✓/⚠️/❌
+- Efficient algorithms used ✓/⚠️/❌
+- Resource usage optimized ✓/⚠️/❌
+
+**Testing & Coverage:**
+- Tests included for new features ✓/⚠️/❌
+- Edge cases covered ✓/⚠️/❌
+- Integration tests present ✓/⚠️/❌
+
+</details>
+
+## 🎯 Review Recommendations
+
+### ✅ **Approved Changes**
+- Well-structured implementation
+- Follows coding standards
+- Comprehensive test coverage
+
+### ⚠️ **Suggested Improvements**
+- Consider refactoring for better readability
+- Add more comprehensive error handling
+- Update documentation
+
+### ❌ **Required Changes**
+- Fix critical security issues
+- Address performance bottlenecks
+- Add missing test coverage
+
+## 🚀 Merge Recommendation
+
+**Overall Assessment:** ✅ **APPROVED** / ⚠️ **APPROVED WITH SUGGESTIONS** / ❌ **CHANGES REQUESTED**
+
+### Next Steps:
+1. **Address any critical issues** mentioned above
+2. **Review suggested improvements** for code quality
+3. **Ensure all tests pass** before merging
+4. **Update documentation** if needed
+
+---
+*🔍 SWE-Agent using ${model_name} • PR review complete • ${context_emoji} ${context_mode} context*
+EOF
+            ;;
         "opinion")
             cat << 'EOF'
 💡 **SWE-Agent Opinion & Recommendations**
 
-**Issue:** #${issue_number} - ${issue_title}
+**${context_description}:** #${issue_number} - ${issue_title}
+**Context:** ${context_mode} (${context_type})
 **Model:** ${model_name}
 **Response Type:** Opinion & Advice
 **Analysis Time:** ${execution_time}
@@ -310,14 +433,15 @@ Based on my analysis, here's what I'd recommend:
 4. **Monitor the results** after implementation
 
 ---
-*💡 SWE-Agent using ${model_name} • Opinion & advisory response*
+*💡 SWE-Agent using ${model_name} • Opinion & advisory response • ${context_emoji} ${context_mode} context*
 EOF
             ;;
         "analysis")
             cat << 'EOF'
 🔍 **SWE-Agent Code Analysis Report**
 
-**Issue:** #${issue_number} - ${issue_title}
+**${context_description}:** #${issue_number} - ${issue_title}
+**Context:** ${context_mode} (${context_type})
 **Model:** ${model_name}
 **Response Type:** Technical Analysis
 **Analysis Time:** ${execution_time}
@@ -342,14 +466,15 @@ ${content}
 - **Maintenance Burden:** Reviewing long-term maintainability
 
 ---
-*🔍 SWE-Agent using ${model_name} • Technical analysis complete*
+*🔍 SWE-Agent using ${model_name} • Technical analysis complete • ${context_emoji} ${context_mode} context*
 EOF
             ;;
         "visual")
             cat << 'EOF'
 📊 **SWE-Agent Visual Analysis**
 
-**Issue:** #${issue_number} - ${issue_title}
+**${context_description}:** #${issue_number} - ${issue_title}
+**Context:** ${context_mode} (${context_type})
 **Model:** ${model_name}
 **Response Type:** Visual Content
 **Generation Time:** ${execution_time}
@@ -374,7 +499,7 @@ ${content}
 4. **Include in documentation** or presentations
 
 ---
-*📊 SWE-Agent using ${model_name} • Visual content generated*
+*📊 SWE-Agent using ${model_name} • Visual content generated • ${context_emoji} ${context_mode} context*
 EOF
             ;;
         *)
@@ -422,6 +547,23 @@ Description: $issue_body
 User Request: $comment_body
 
 Generate diagrams, charts, or visual representations using Mermaid syntax, ASCII art, or code examples that would help visualize the problem or solution."
+            ;;
+        "pr_review")
+            analysis_prompt="As an expert code reviewer, conduct a comprehensive pull request review:
+
+Pull Request: $issue_title
+Description: $issue_body
+Review Request: $comment_body
+
+Please provide a thorough code review covering:
+1. **Code Quality**: Architecture, design patterns, readability, maintainability
+2. **Security**: Potential vulnerabilities, input validation, error handling
+3. **Performance**: Efficiency, resource usage, scalability considerations
+4. **Testing**: Test coverage, edge cases, integration testing
+5. **Best Practices**: Coding standards, documentation, style consistency
+6. **Merge Safety**: Breaking changes, backward compatibility, deployment impact
+
+Provide specific recommendations and an overall merge recommendation (Approved/Approved with Suggestions/Changes Requested)."
             ;;
     esac
     
@@ -581,16 +723,56 @@ call_gemini_api() {
 }
 
 # --- GitHub Context Extraction ---
-log "🔍 Extracting GitHub context..."
+log "🔍 Extracting enhanced GitHub context..."
 
-# Extract GitHub context from environment
+# Extract comprehensive GitHub context
+extract_enhanced_github_context
+
+# Detect GitHub event context
+DETECTED_CONTEXT=$(detect_github_context)
+log "🎯 Detected GitHub context: $DETECTED_CONTEXT"
+
+# Determine final context mode
+FINAL_CONTEXT_MODE="$CONTEXT_MODE"
+if [ "$CONTEXT_MODE" = "auto" ]; then
+    FINAL_CONTEXT_MODE="$DETECTED_CONTEXT"
+fi
+
+# Determine Git reference and target branch
+GIT_REFERENCE=$(determine_git_reference "$FINAL_CONTEXT_MODE" "$GIT_REFERENCE_MODE")
+TARGET_BRANCH=$(determine_target_branch "$FINAL_CONTEXT_MODE" "$TARGET_BRANCH_STRATEGY")
+
+# Set primary context variables with enhanced logic
+if [ -n "$GITHUB_EVENT_PULL_REQUEST_NUMBER" ] && [[ "$FINAL_CONTEXT_MODE" =~ ^(pr_|pull_request) ]]; then
+    # PR context
+    ISSUE_NUMBER="$GITHUB_EVENT_PULL_REQUEST_NUMBER"
+    ISSUE_TITLE="${GITHUB_EVENT_PULL_REQUEST_TITLE:-${GITHUB_EVENT_ISSUE_TITLE}}"
+    ISSUE_BODY="${GITHUB_EVENT_ISSUE_BODY}"  # PR description from issue body
+    COMMENT_BODY="${GITHUB_EVENT_COMMENT_BODY:-${GITHUB_EVENT_REVIEW_BODY}}"
+    COMMENT_ID="${GITHUB_EVENT_COMMENT_ID}"
+    CONTEXT_TYPE="pr"
+else
+    # Issue context
+    ISSUE_NUMBER="${GITHUB_EVENT_ISSUE_NUMBER:-${ISSUE_NUMBER}}"
+    ISSUE_TITLE="${GITHUB_EVENT_ISSUE_TITLE:-${ISSUE_TITLE}}"
+    ISSUE_BODY="${GITHUB_EVENT_ISSUE_BODY:-${ISSUE_BODY}}"
+    COMMENT_BODY="${GITHUB_EVENT_COMMENT_BODY:-${COMMENT_BODY}}"
+    COMMENT_ID="${GITHUB_EVENT_COMMENT_ID:-${COMMENT_ID}}"
+    CONTEXT_TYPE="issue"
+fi
+
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY}"
-ISSUE_NUMBER="${GITHUB_EVENT_NUMBER:-${ISSUE_NUMBER}}"
-COMMENT_BODY="${GITHUB_EVENT_COMMENT_BODY:-${COMMENT_BODY}}"
-ISSUE_TITLE="${GITHUB_EVENT_ISSUE_TITLE:-${ISSUE_TITLE}}"
-ISSUE_BODY="${GITHUB_EVENT_ISSUE_BODY:-${ISSUE_BODY}}"
-COMMENT_ID="${GITHUB_EVENT_COMMENT_ID:-${COMMENT_ID}}"
 REPO_URL="https://github.com/${GITHUB_REPOSITORY}.git"
+
+# Validate context
+validate_context "$FINAL_CONTEXT_MODE" "$GIT_REFERENCE"
+validation_result=$?
+if [ $validation_result -eq 1 ]; then
+    log "❌ Context validation failed"
+    exit 1
+elif [ $validation_result -eq 2 ]; then
+    log "⚠️ Context validation warning, proceeding with fallback"
+fi
 
 # Validate required GitHub context
 if [ -z "$GITHUB_REPOSITORY" ] || [ -z "$ISSUE_NUMBER" ] || [ -z "$COMMENT_BODY" ] || [ -z "$COMMENT_ID" ]; then
@@ -598,7 +780,10 @@ if [ -z "$GITHUB_REPOSITORY" ] || [ -z "$ISSUE_NUMBER" ] || [ -z "$COMMENT_BODY"
     exit 1
 fi
 
-log "📝 Processing issue #${ISSUE_NUMBER} in ${GITHUB_REPOSITORY}"
+# Log comprehensive context information
+log_context_info "$FINAL_CONTEXT_MODE" "$GIT_REFERENCE" "$TARGET_BRANCH"
+
+log "📝 Processing ${CONTEXT_TYPE} #${ISSUE_NUMBER} in ${GITHUB_REPOSITORY}"
 log "💬 Comment body: ${COMMENT_BODY:0:100}..." # Show first 100 chars
 
 # --- Intent Detection and Routing ---
@@ -616,12 +801,36 @@ fi
 
 log "⚙️ Final response mode: $FINAL_RESPONSE_MODE"
 
-# Create initial progress comment
-PROGRESS_COMMENT_ID=$(post_comment "🔄 **SWE-Agent is analyzing your request...**
+# Create initial progress comment with context awareness
+CONTEXT_EMOJI=""
+CONTEXT_DESCRIPTION=""
+case "$FINAL_CONTEXT_MODE" in
+    "pr_review"|"pr_review_comment")
+        CONTEXT_EMOJI="🔍"
+        CONTEXT_DESCRIPTION="PR Review Comment"
+        ;;
+    "pr_comment"|"pull_request")
+        CONTEXT_EMOJI="🔄"
+        CONTEXT_DESCRIPTION="Pull Request"
+        ;;
+    "issue_comment")
+        CONTEXT_EMOJI="📝"
+        CONTEXT_DESCRIPTION="Issue"
+        ;;
+    *)
+        CONTEXT_EMOJI="🤖"
+        CONTEXT_DESCRIPTION="Request"
+        ;;
+esac
 
-**Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
+PROGRESS_COMMENT_ID=$(post_comment "${CONTEXT_EMOJI} **SWE-Agent is analyzing your request...**
+
+**${CONTEXT_DESCRIPTION}:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
+**Context:** ${FINAL_CONTEXT_MODE} (${CONTEXT_TYPE})
 **Request Type:** ${FINAL_RESPONSE_MODE}
 **Model:** ${MODEL_NAME}
+**Git Reference:** ${GIT_REFERENCE:0:8}...
+**Target Branch:** ${TARGET_BRANCH}
 
 ⏳ Setting up environment and determining the best approach...")
 
@@ -636,6 +845,9 @@ case "$FINAL_RESPONSE_MODE" in
     "visual")
         add_contextual_reaction "success_visual"
         ;;
+    "pr_review")
+        add_contextual_reaction "pr_reviewing"
+        ;;
     *)
         add_contextual_reaction "processing"
         ;;
@@ -649,8 +861,8 @@ if [ "$FINAL_RESPONSE_MODE" != "patch" ]; then
     result=$(handle_non_patch_request "$FINAL_RESPONSE_MODE" "$COMMENT_BODY" "$ISSUE_TITLE" "$ISSUE_BODY" "$ISSUE_NUMBER" "$MODEL_NAME")
     
     if [ $? -eq 0 ] && [ -n "$result" ]; then
-        # Format the response according to intent
-        formatted_response=$(format_response_by_intent "$FINAL_RESPONSE_MODE" "$result" "$ISSUE_NUMBER" "$ISSUE_TITLE" "$MODEL_NAME" "$(date)")
+        # Format the response according to intent with context
+        formatted_response=$(format_response_by_intent "$FINAL_RESPONSE_MODE" "$result" "$ISSUE_NUMBER" "$ISSUE_TITLE" "$MODEL_NAME" "$(date)" "$CONTEXT_TYPE" "$FINAL_CONTEXT_MODE")
         
         # Update progress comment with final result
         if [ -n "$PROGRESS_COMMENT_ID" ]; then
@@ -665,10 +877,13 @@ if [ "$FINAL_RESPONSE_MODE" != "patch" ]; then
                 add_contextual_reaction "success_opinion"
                 ;;
             "analysis")
-                add_contextual_reaction "success"
+                add_contextual_reaction "success_analysis"
                 ;;
             "visual")
                 add_contextual_reaction "success_visual"
+                ;;
+            "pr_review")
+                add_contextual_reaction "success_pr_review"
                 ;;
         esac
         
@@ -711,7 +926,7 @@ update_progress "initializing" "Setting up environment and cloning repository" "
 - Creating temporary directories
 - Preparing to clone repository"
 
-# Clone repository
+# Clone repository with context-aware setup
 log "📥 Cloning repository..."
 if ! git clone "$REPO_URL" "$REPO_DIR"; then
     log "❌ Failed to clone repository"
@@ -720,10 +935,46 @@ if ! git clone "$REPO_URL" "$REPO_DIR"; then
     exit 1
 fi
 
+# Context-aware Git setup
+cd "$REPO_DIR"
+log "🔧 Setting up Git context for: $FINAL_CONTEXT_MODE"
+
+case "$FINAL_CONTEXT_MODE" in
+    "pr_review"|"pr_review_comment"|"pr_comment"|"pull_request")
+        # For PR contexts, checkout the PR head branch
+        if [ -n "$GITHUB_EVENT_PULL_REQUEST_HEAD_REF" ]; then
+            log "🌿 Checking out PR branch: $GITHUB_EVENT_PULL_REQUEST_HEAD_REF"
+            if git fetch origin "$GITHUB_EVENT_PULL_REQUEST_HEAD_REF:$GITHUB_EVENT_PULL_REQUEST_HEAD_REF" 2>/dev/null; then
+                git checkout "$GITHUB_EVENT_PULL_REQUEST_HEAD_REF"
+            else
+                log "⚠️ Could not fetch PR branch, using HEAD SHA"
+                git checkout "$GIT_REFERENCE" 2>/dev/null || git checkout HEAD
+            fi
+        elif [ -n "$GIT_REFERENCE" ] && [ "$GIT_REFERENCE" != "HEAD" ]; then
+            log "📍 Checking out specific commit: $GIT_REFERENCE"
+            git checkout "$GIT_REFERENCE" 2>/dev/null || git checkout HEAD
+        fi
+        ;;
+    "issue_comment"|*)
+        # For issue contexts, stay on default branch but ensure we're at the right commit
+        if [ -n "$GIT_REFERENCE" ] && [ "$GIT_REFERENCE" != "HEAD" ]; then
+            log "📍 Checking out commit: $GIT_REFERENCE"
+            git checkout "$GIT_REFERENCE" 2>/dev/null || git checkout HEAD
+        fi
+        ;;
+esac
+
+# Display current Git status
+CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "detached")
+CURRENT_COMMIT=$(git rev-parse --short HEAD)
+log "📊 Git Status: branch=$CURRENT_BRANCH, commit=$CURRENT_COMMIT"
+
 # Update progress: Analyzing
-update_progress "analyzing" "Repository cloned, analyzing issue requirements" "- Repository: $(basename "$REPO_URL")
-- Issue: $ISSUE_TITLE
-- Preparing problem statement for SWE-Agent"
+update_progress "analyzing" "Repository setup complete, analyzing requirements" "- Repository: $(basename "$REPO_URL")
+- Context: $FINAL_CONTEXT_MODE
+- Branch: $CURRENT_BRANCH
+- Commit: $CURRENT_COMMIT
+- ${CONTEXT_DESCRIPTION}: $ISSUE_TITLE"
 
 # Change working directory to the PARENT of the cloned repo
 cd "$TEMP_DIR"
@@ -954,11 +1205,27 @@ if [ $SWE_EXIT_CODE -eq 0 ]; then
             fi
         fi
         
+        # Context-aware success message
+        local context_emoji=""
+        local context_action=""
+        case "$FINAL_CONTEXT_MODE" in
+            "pr_review"|"pr_review_comment"|"pr_comment"|"pull_request")
+                context_emoji="🔄"
+                context_action="updated the existing Pull Request"
+                ;;
+            "issue_comment"|*)
+                context_emoji="🆕"
+                context_action="created a new solution"
+                ;;
+        esac
+        
         FINAL_MESSAGE="✅ **Solution Generated Successfully!**
 
-**Issue:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
+**${CONTEXT_DESCRIPTION}:** #${ISSUE_NUMBER} - ${ISSUE_TITLE}
+**Context:** ${FINAL_CONTEXT_MODE} (${CONTEXT_TYPE})
 **Model:** ${MODEL_NAME}
 **Execution Time:** ${elapsed_minutes_str}
+**Git Reference:** ${GIT_REFERENCE:0:8}...
 
 ${STATS_SUMMARY}
 
@@ -974,15 +1241,15 @@ ${PATCH_CONTENT}
 </details>
 
 ## 🔄 Next Steps
-✨ The patch is being processed and a Pull Request will be created shortly.
+✨ The patch is being processed and ${context_action}.
 
 **What happens next:**
 1. 🔄 Patch validation and testing
-2. 📝 Pull Request creation with detailed description
+2. 📝 ${context_action == *"existing"* && echo "Pull Request update" || echo "Pull Request creation"} with detailed description
 3. ✅ Ready for review and merge
 
 ---
-*✨ Generated by SWE-Agent using $MODEL_NAME • [View full patch in upcoming PR]*"
+*✨ Generated by SWE-Agent using $MODEL_NAME • ${context_emoji} ${FINAL_CONTEXT_MODE} context*"
         
         # Update the progress comment with final results
         if [ -n "$PROGRESS_COMMENT_ID" ]; then

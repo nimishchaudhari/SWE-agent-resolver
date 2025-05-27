@@ -1,32 +1,52 @@
-# SWE-Agent GitHub Actions Resolver
+# SWE-Agent AIO Resolver
 
-A complete GitHub Action that automatically resolves issues using [SWE-Agent](https://github.com/SWE-agent/SWE-agent) - an AI-powered autonomous software engineer. Generates patches and automatically creates Pull Requests.
+A comprehensive GitHub Action that provides AI-powered code assistance using [SWE-Agent](https://github.com/SWE-agent/SWE-agent). Supports code fixes, expert opinions, technical analysis, visual content generation, and pull request reviews.
 
-## ✨ Features
+## ✨ Key Features
 
-- 🤖 **AI-Powered Issue Resolution**: Uses SWE-Agent with models like GPT-4o or Claude
-- 💬 **Comment-Triggered**: Simply comment `@swe-agent fix this` on any issue
-- 🔧 **Automatic Patch Generation**: Generates code patches to resolve issues
-- 🔄 **Auto Pull Request Creation**: Automatically applies patches and creates PRs
-- 📝 **Real-time Progress Updates** [TO BE IMPLEMENTED]: Posts live updates to GitHub issues
-- ⚡ **Complete Automation** [The user's comment needs to be detailed enough]: From analysis to PR creation, fully automated
+- 🤖 **Multi-Mode AI Assistance**: Code fixes, opinions, analysis, visuals, and PR reviews
+- 💬 **Universal Context Support**: Works in Issues, Pull Requests, Review Comments, and PR Reviews
+- 🔄 **Smart Intent Detection**: Automatically detects what type of help you need
+- 🎯 **Context-Aware Actions**: Continues existing PRs or creates new ones intelligently
+- 📊 **Visual Content Generation**: Creates diagrams, charts, and visualizations
+- 🔍 **Comprehensive PR Reviews**: Security, performance, code quality analysis
+- ⚡ **All-In-One Deployment**: Single workflow file - easy to copy and deploy
 
-## 🎯 Enhanced Response Modes (New!)
+## 🚀 Quick Start
 
-SWE-Agent now supports multiple response types beyond just code patches:
+1. **Copy the AIO workflow** to your repository:
+   ```bash
+   curl -o .github/workflows/swe-agent.yml https://raw.githubusercontent.com/nimishchaudhari/swe-agent-resolver/main/workflow-aio.yml
+   ```
 
-### 💡 Opinion & Advisory
-Get expert recommendations and best practices:
+2. **Add API key** to repository secrets:
+   ```
+   OPENAI_API_KEY (required)
+   ```
+
+3. **Start using** by mentioning `@swe-agent` in issues, PRs, or reviews!
+
+## 🎯 Response Types
+
+### 🔧 Code Fixes
+Traditional SWE-Agent patches for bugs and implementations:
 ```
-@swe-agent What do you think about this architecture approach?
+@swe-agent Fix the authentication bug in the login handler
+@swe-agent Implement error handling for the API endpoints
+```
+
+### 💡 Expert Opinions
+Get recommendations and best practices:
+```
+@swe-agent What do you think about using Redis for caching here?
 @swe-agent Should I use microservices or monolith for this project?
 ```
 
 ### 🔍 Technical Analysis  
-Receive detailed code and architectural analysis:
+Detailed code and architectural analysis:
 ```
 @swe-agent Analyze this authentication flow for security issues
-@swe-agent Review the performance implications of this design
+@swe-agent Review the performance implications of this database design
 ```
 
 ### 📊 Visual Content
