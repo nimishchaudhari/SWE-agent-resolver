@@ -1,23 +1,22 @@
-# Multi-stage build for optimized container environment
-# Stage 1: Builder - Install dependencies and SWE-agent
-FROM ubuntu:24.04 AS builder
+# Single-stage build for container environment with robust pip handling
+FROM ubuntu:24.04
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install build dependencies
+# Install all required dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3=3.12* \
     python3-dev \
     python3-pip \
     git \
+    jq \
     build-essential \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Use system-managed packages when possible, only upgrade if needed
-RUN python3 -c "import pip; print('System pip OK')" || \
-    python3 -m pip install --no-cache-dir --user pip setuptools wheel
+# Verify system pip works without upgrading to avoid conflicts
+RUN python3 -c "import pip; print('System pip OK')"
 
 # Clone SWE-agent repository
 RUN git clone --depth 1 https://github.com/SWE-agent/SWE-agent.git /app/swe-agent
@@ -25,37 +24,13 @@ RUN git clone --depth 1 https://github.com/SWE-agent/SWE-agent.git /app/swe-agen
 # Set working directory for SWE-agent installation
 WORKDIR /app/swe-agent
 
-# Install SWE-agent dependencies using system environment
+# Install SWE-agent dependencies using system environment with --break-system-packages
 RUN if [ -f "requirements.txt" ]; then \
-        python3 -m pip install --no-cache-dir -r requirements.txt --user || \
         python3 -m pip install --no-cache-dir -r requirements.txt --break-system-packages; \
     fi
 
-# Install SWE-agent in editable mode using compatible approach
-RUN python3 -m pip install --no-cache-dir --editable . --user || \
-    python3 -m pip install --no-cache-dir --editable . --break-system-packages
-
-# Stage 2: Runtime - Optimized runtime environment
-FROM ubuntu:24.04 AS runtime
-
-# Prevent interactive prompts during package installation
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install only runtime dependencies (no build tools)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3=3.12* \
-    python3-pip \
-    git \
-    jq \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
-
-# Copy SWE-agent installation from builder stage
-COPY --from=builder /app/swe-agent /app/swe-agent
-COPY --from=builder /root/.local /root/.local
-
-# Add local pip packages to PATH
-ENV PATH="/root/.local/bin:$PATH"
+# Install SWE-agent in editable mode with --break-system-packages
+RUN python3 -m pip install --no-cache-dir --editable . --break-system-packages
 
 # Set main working directory
 WORKDIR /app
