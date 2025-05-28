@@ -1,5 +1,5 @@
 # Use Python 3.12 slim image for compatibility and smaller size
-FROM python:3.14.0b2-alpine3.21
+FROM python:3.14
 
 # Install required system packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
