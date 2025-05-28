@@ -1,16 +1,16 @@
-# Optimized single-stage build for container environment
-FROM ubuntu:24.04
+# Multi-stage build for optimized container environment
+# Stage 1: Builder - Install dependencies and SWE-agent
+FROM ubuntu:24.04 AS builder
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install only the packages not included in Ubuntu 24.04 base image
+# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3=3.12* \
     python3-dev \
     python3-pip \
     git \
-    jq \
     build-essential \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
@@ -34,6 +34,28 @@ RUN if [ -f "requirements.txt" ]; then \
 # Install SWE-agent in editable mode using compatible approach
 RUN python3 -m pip install --no-cache-dir --editable . --user || \
     python3 -m pip install --no-cache-dir --editable . --break-system-packages
+
+# Stage 2: Runtime - Optimized runtime environment
+FROM ubuntu:24.04 AS runtime
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install only runtime dependencies (no build tools)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3=3.12* \
+    python3-pip \
+    git \
+    jq \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Copy SWE-agent installation from builder stage
+COPY --from=builder /app/swe-agent /app/swe-agent
+COPY --from=builder /root/.local /root/.local
+
+# Add local pip packages to PATH
+ENV PATH="/root/.local/bin:$PATH"
 
 # Set main working directory
 WORKDIR /app
