@@ -1,0 +1,10 @@
+# Jest coverage reports
+coverage/
+
+# NCC output directory
+# We typically commit the dist directory for GitHub Actions
+# but if you prefer not to, uncomment the line below.
+# /dist/
+
+# ESLint cache
+.eslintcache

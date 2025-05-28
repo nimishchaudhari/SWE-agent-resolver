@@ -1,335 +1,122 @@
-# SWE-Agent Issue Resolver
+# SWE-Agent Issue Resolver (TypeScript Edition)
 
-[![Docker Build](https://github.com/nimishchaudhari/swe-agent-resolver/actions/workflows/build-docker-image.yml/badge.svg)](https://github.com/nimishchaudhari/swe-agent-resolver/actions/workflows/build-docker-image.yml)
-[![All-in-One Workflow](https://github.com/nimishchaudhari/swe-agent-resolver/actions/workflows/swe-agent-aio.yml/badge.svg)](https://github.com/nimishchaudhari/swe-agent-resolver/actions/workflows/swe-agent-aio.yml)
+[![TypeScript Build](https://github.com/nimishchaudhari/swe-agent-resolver/actions/workflows/typescript-build.yml/badge.svg)](https://github.com/nimishchaudhari/swe-agent-resolver/actions/workflows/typescript-build.yml)
+[![All-in-One Workflow](https://github.com/nimishchaudhari/swe-agent-resolver/actions/workflows/swe-agent-aio.yml/badge.svg)](https://github.com/nimishchaudhari/swe-agent-resolver/actions/workflows/swe-agent-aio.yml) <!-- This will be updated to reflect the new TypeScript action -->
 
-A sophisticated GitHub Action that leverages AI to automatically analyze and resolve software engineering issues. Built with a modular architecture for reliability, extensibility, and maintainability.
+A sophisticated GitHub Action that leverages AI to automatically analyze and resolve software engineering issues. This version is implemented in TypeScript for enhanced reliability, maintainability, and performance, while still orchestrating the powerful Python-based `swe-agent`.
 
 ## 🚀 Quick Start
 
-### Automatic Setup (Recommended)
+The action is triggered by comments on issues or pull requests.
 
-Simply mention the agent in any issue comment, and it will automatically analyze and provide solutions:
+### Triggering the Action
+
+Mention the agent in any issue or pull request comment with your request:
 
 ```
 @swe-agent Please fix this bug
-@swe-agent Implement this feature  
+@swe-agent Implement this feature
 @swe-agent Analyze this performance issue
-@swe-agent Please comment today's date
+@swe-agent Can you refactor this module?
 ```
 
-### Manual Workflow Setup
+### Workflow Setup
 
-Add this to your `.github/workflows/swe-agent.yml`:
+Ensure you have a workflow file (e.g., `.github/workflows/swe-agent-typescript.yml`) that uses this action:
 
 ```yaml
-name: SWE-Agent Issue Resolution
+name: SWE-Agent TypeScript Resolver
 on:
   issue_comment:
-    types: [created]
+    types: [created, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+  # Potentially add pull_request event for PR description triggers if implemented
 
 jobs:
-  resolve-issue:
-    runs-on: ubuntu-latest
-    if: contains(github.event.comment.body, '@swe-agent')
+  resolve_with_swe_agent:
+    runs-on: ubuntu-latest # The new Dockerfile is based on Node.js, so this should be fine.
     steps:
-      - uses: nimishchaudhari/swe-agent-resolver@main
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          fetch-depth: 0 # Required for SWE-Agent to have full repo history if it's still used directly for git operations
+
+      - name: Run SWE-Agent Resolver (TypeScript)
+        uses: ./ # Uses the action in the current repository
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # --- Required API Keys (at least one provider) ---
+          # OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          # OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }} # If using OpenRouter
+          # GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }} # If using Google Gemini
+
+          # --- Core Configuration (TypeScript Action) ---
+          MODEL_NAME: 'gpt-4o' # Or your preferred model
+          TRIGGER_PHRASE: '@swe-agent'
+          # CONFIG_FILE: '.github/swe-agent-config.json' # Default path for TS action config
+
+          # --- SWE-Agent Python Tool Configuration (if invoked by TypeScript) ---
+          # These might be passed through or set via the CONFIG_FILE
+          # SWE_AGENT_MODEL_NAME: 'gpt-4o' # Model for the Python swe-agent if different
+          # SWE_AGENT_ARGS: | # Optional multi-line arguments for the python swe-agent
+          #   --some-swe-agent-flag=value
+          # SWE_AGENT_SETUP_COMMANDS: | # Optional multi-line setup commands for the python swe-agent
+          #   pip install -r requirements-dev.txt
+
+          # --- Behavior Configuration (TypeScript Action) ---
+          # LOG_LEVEL: 'INFO' # 'DEBUG', 'INFO', 'WARNING', 'ERROR'
+          # MAX_COMMENT_LENGTH: '65536' # Max length for GitHub comments
+
 ```
 
 ## ✨ Features
 
-### Core Capabilities
-- **🤖 Smart AI Integration**: Supports multiple AI providers (OpenAI, Anthropic, Google Gemini, OpenRouter)
-- **🔍 Automatic Context Detection**: Intelligently detects issue context, PR context, and review context
-- **⚡ Instant Activation**: Just mention `@swe-agent` in any issue or PR comment
-- **🎯 Intent Recognition**: Automatically determines whether to generate patches, provide analysis, or give advice
-- **📊 Visual Content**: Generates charts, diagrams, and visual representations when helpful
+*   **TypeScript Implementation**: Modern, maintainable, and type-safe codebase.
+*   **Orchestrates Python `swe-agent`**: Leverages the power of the original `swe-agent` for core task resolution. The TypeScript action acts as a wrapper.
+*   **Modular Design**: Clear separation of concerns for configuration, GitHub interactions, intent detection, AI API calls, response formatting, and `swe-agent` Python tool execution.
+*   **Multi-Provider AI Support**: Easily configurable to use models from OpenAI, Anthropic, DeepSeek, OpenRouter, and Gemini via the TypeScript layer.
+*   **Context-Aware Operation**: Adapts behavior based on whether it's triggered from an issue, PR comment, or PR review.
+*   **Flexible Intent Handling**:
+    *   Generates code patches for "fix," "implement," etc. by invoking `swe-agent`.
+    *   Provides analysis for "analyze," "explain," etc. using configured AI models.
+    *   Offers opinions/advice for "suggest," "recommend," etc.
+*   **Enhanced GitHub Integration**:
+    *   Posts detailed comments with results.
+    *   Can update existing comments with progress.
+    *   Uses reactions for quick status feedback.
+*   **Configurable**: Many aspects of its behavior can be tuned via GitHub Action inputs and the `CONFIG_FILE`.
 
-### Multi-Context Support
-- **📝 Issue Comments**: Analyzes issues and creates pull requests with fixes
-- **🔄 PR Comments**: Updates existing pull requests with improvements
-- **👁️ PR Reviews**: Responds to code review feedback with targeted fixes
-- **🔀 PR Synchronization**: Handles pull request updates and conflicts
+## 🛠️ Development
 
-### Technical Excellence
-- **🐳 Docker-Based**: Consistent execution environment with branch-specific image selection
-- **⏱️ Smart Timeouts**: Configurable execution limits with intelligent wait logic
-- **🔧 Modular Architecture**: Clean separation of concerns with reusable components
-- **📈 Progress Tracking**: Real-time progress updates and detailed logging
-- **🧪 Comprehensive Testing**: Extensive validation scripts and automated testing
+1.  **Prerequisites**: Node.js (v20+), npm. Docker is required if you plan to build/run the action using the `Dockerfile` locally.
+2.  **Install Dependencies**: `npm install`
+3.  **Build**: `npm run build` (compiles TypeScript to `dist/index.js`). This is automatically run if you use `npm start`.
+4.  **Lint**: `npm run lint`
+5.  **Test**: `npm test` (Test framework and scripts to be added/updated)
+6.  **Run Locally (Simulated)**: You can simulate the action by setting environment variables and running `npm start` or `node dist/index.js`.
 
-## 🚀 Quick Start
+### Project Structure
 
-### Advanced Configuration
+*   `src/`: Contains the TypeScript source code.
+    *   `index.ts`: Main entry point for the action.
+    *   `config.ts`: Handles configuration loading and validation.
+    *   `github.ts`: Manages interactions with the GitHub API.
+    *   `intent.ts`: Detects user intent from comments.
+    *   `ai.ts`: Interfaces with various AI model APIs.
+    *   `responseFormatter.ts`: Formats AI responses for GitHub.
+    *   `sweAgent.ts`: Handles the execution of the Python `swe-agent` tool.
+    *   `utils.ts`: Common utility functions.
+*   `dist/`: Contains the compiled JavaScript code (after running `npm run build`).
+*   `legacy/`: Contains the original shell scripts, Dockerfile, and action.yml for reference.
+*   `Dockerfile`: Defines the Docker image for running the TypeScript action.
+*   `action.yml`: Defines the metadata for the GitHub Action.
+*   `package.json`: Manages project dependencies and scripts.
+*   `tsconfig.json`: TypeScript compiler options.
 
-```yaml
-name: Advanced SWE-Agent Setup
-on:
-  issue_comment:
-    types: [created]
-  pull_request_review_comment:
-    types: [created]
-  pull_request_review:
-    types: [submitted]
-  pull_request:
-    types: [opened, synchronize]
-
-jobs:
-  swe-agent:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    if: contains(github.event.comment.body, '@swe-agent') || contains(github.event.review.body, '@swe-agent') || contains(github.event.pull_request.body, '@swe-agent')
-    
-    steps:
-      - uses: nimishchaudhari/swe-agent-resolver@main
-        with:
-          # Required Parameters
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
-          
-          # Optional AI Provider Keys
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
-          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
-          
-          # Configuration
-          model_name: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}
-          timeout_minutes: '50'
-          response_mode: 'auto'  # auto, patch, analysis, opinion
-          enable_visual_content: 'true'
-          
-          # Multi-context settings
-          context_mode: 'auto'
-          pr_strategy: 'continue'
-          enable_review_context: 'true'
-```
-
-## ⚙️ Configuration
-
-### Required Environment Variables
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `GITHUB_TOKEN` | GitHub API token with repo permissions | `${{ secrets.GITHUB_TOKEN }}` |
-| `OPENAI_API_KEY` | OpenAI API key for AI processing | `${{ secrets.OPENAI_API_KEY }}` |
-
-### Optional Parameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `timeout_minutes` | `20` | Maximum execution time in minutes |
-| `max_iterations` | `5` | Maximum AI analysis iterations |
-| `ai_model` | `"gpt-4"` | AI model to use for analysis |
-| `analysis_depth` | `"standard"` | Analysis depth: `quick`, `standard`, `comprehensive` |
-| `custom_instructions` | `""` | Additional instructions for the AI |
-
-### Advanced Configuration
-
-#### Multiple AI Providers
-```yaml
-- uses: your-org/swe-agent-resolver@main
-  with:
-    # Primary provider
-    openai_api_key: ${{ secrets.OPENAI_API_KEY }}
-    
-    # Fallback providers
-    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-    google_api_key: ${{ secrets.GOOGLE_API_KEY }}
-```
-
-#### Custom Docker Image
-```yaml
-- uses: your-org/swe-agent-resolver@main
-  with:
-    docker_image: "your-org/swe-agent-resolver:custom-tag"
-```
-
-## 🏗️ Architecture
-
-### Modular Design
-
-```
-src/
-├── utils.sh           # Core utilities and logging
-├── config.sh          # Configuration management
-├── github.sh          # GitHub API integration
-├── intent.sh          # Issue analysis and intent detection
-├── progress.sh        # Progress tracking and reporting
-├── ai_api.sh          # AI provider abstraction
-├── response_formatter.sh # Output formatting
-└── swe_agent.sh       # Main orchestration logic
-```
-
-### Workflow Components
-
-```
-.github/workflows/
-├── swe-agent-aio.yml       # Main issue resolution workflow
-└── build-docker-image.yml  # Container build automation
-```
-
-### Testing Infrastructure
-
-```
-test/
-├── validate-full-setup.sh    # Comprehensive validation
-├── validate-docker-setup.sh  # Docker-specific tests
-├── quick-sanity-check.sh     # Fast validation
-└── final-status-report.sh    # Status reporting
-```
-
-## 🔧 Development
-
-### Local Testing
-
-```bash
-# Quick validation
-./test/quick-sanity-check.sh
-
-# Comprehensive testing
-./test/validate-full-setup.sh
-
-# Docker validation
-./test/validate-docker-setup.sh
-```
-
-### Building Locally
-
-```bash
-# Build Docker image
-docker build -t swe-agent-resolver:local .
-
-# Test locally
-docker run --rm \
-  -e GITHUB_TOKEN="your-token" \
-  -e OPENAI_API_KEY="your-key" \
-  swe-agent-resolver:local
-```
-
-### Contributing
-
-1. **Fork the repository**
-2. **Create a feature branch**: `git checkout -b feature/your-feature`
-3. **Run tests**: `./test/validate-full-setup.sh`
-4. **Commit changes**: `git commit -am 'Add your feature'`
-5. **Push to branch**: `git push origin feature/your-feature`
-6. **Create Pull Request**
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-#### "No such file or directory" Error
-**Cause**: Script execution before repository checkout  
-**Solution**: Ensure `actions/checkout` runs before SWE-Agent action
-
-```yaml
-steps:
-  - name: Checkout Repository
-    uses: actions/checkout@v4  # Must be first!
-    
-  - name: Run SWE-Agent
-    uses: your-org/swe-agent-resolver@main
-```
-
-#### Docker Image Not Found
-**Cause**: Branch-specific image doesn't exist  
-**Solution**: The action automatically falls back to `:latest`. Check Docker build logs.
-
-#### Timeout Issues
-**Cause**: Complex issues exceeding time limits  
-**Solution**: Increase `timeout_minutes` parameter
-
-```yaml
-- uses: your-org/swe-agent-resolver@main
-  with:
-    timeout_minutes: 45  # Increased from default 20
-```
-
-#### AI API Rate Limits
-**Cause**: Exceeding API quotas  
-**Solution**: Configure multiple providers or adjust iteration limits
-
-```yaml
-- uses: your-org/swe-agent-resolver@main
-  with:
-    max_iterations: 3  # Reduced from default 5
-    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}  # Fallback
-```
-
-### Debug Mode
-
-Enable detailed logging:
-
-```yaml
-- uses: your-org/swe-agent-resolver@main
-  with:
-    debug: true
-  env:
-    ACTIONS_STEP_DEBUG: true
-```
-
-### Workflow Validation
-
-Check workflow status:
-
-```bash
-# Validate workflow files
-./test/validate-full-setup.sh
-
-# Check Docker setup
-./test/validate-docker-setup.sh
-
-# Generate status report
-./test/final-status-report.sh
-```
-
-## 📊 Monitoring
-
-### Success Metrics
-- Issue resolution rate
-- Average processing time
-- AI iteration efficiency
-- Error recovery effectiveness
-
-### Logs and Outputs
-- Detailed progress logs in action output
-- AI analysis summaries
-- Code change proposals
-- Error diagnostics and recovery steps
-
-## 🔄 CI/CD Integration
-
-### Automated Docker Builds
-- Triggers on changes to `src/**` and `scripts/**`
-- Branch-specific image tagging
-- Automatic fallback to latest stable image
-
-### Workflow Testing
-- Pre-commit validation
-- Integration testing
-- Performance benchmarking
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🤝 Support
-
-- **Documentation**: Check this README and inline code comments
-- **Issues**: Open a GitHub issue for bugs or feature requests
-- **Discussions**: Use GitHub Discussions for questions and ideas
-- **Contributing**: See development section above
-
-## 🏷️ Version History
-
-- **v2.0.0**: Modular architecture rewrite with enhanced reliability
-- **v1.5.0**: Added multi-AI provider support and branch-aware Docker images
-- **v1.0.0**: Initial stable release with core functionality
+This action is built with a focus on robustness and providing clear, actionable results for software development tasks.
 
 ---
-
 Built with ❤️ for the developer community. Making software engineering more efficient, one issue at a time.

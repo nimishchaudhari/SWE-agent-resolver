@@ -1,0 +1,96 @@
+name: 'SWE-Agent Issue Resolver'
+description: 'Automatically resolves GitHub issues using SWE-Agent with AI assistance'
+author: 'nimishchaudhari'
+
+inputs:
+  github_token:
+    description: 'GitHub token for repository access and comment posting'
+    required: true
+    default: ${{ github.token }}
+  trigger_phrase:
+    description: 'Comment phrase that triggers the agent (e.g., "@swe-agent fix this")'
+    required: false
+    default: '@swe-agent'
+  llm_api_key:
+    description: 'API key for the LLM (OpenAI, Anthropic, etc.). Store as repository secret.'
+    required: false
+  openai_api_key:
+    description: 'OpenAI API key. Store as repository secret.'
+    required: false
+  anthropic_api_key:
+    description: 'Anthropic API key. Store as repository secret.'
+    required: false
+  deepseek_api_key:
+    description: 'DeepSeek API key. Store as repository secret.'
+    required: false
+  openrouter_api_key:
+    description: 'OpenRouter API key. Store as repository secret.'
+    required: false
+  gemini_api_key:
+    description: 'Google Gemini API key. Store as repository secret.'
+    required: false
+  model_name:
+    description: 'AI model to use (e.g., gpt-4o, claude-3.5-sonnet, gpt-4-turbo)'
+    required: false
+    default: 'gpt-4o'
+  timeout_minutes:
+    description: 'Maximum time in minutes to run SWE-agent (default: 30)'
+    required: false
+    default: '30'
+  wait_for_build:
+    description: 'Whether to wait for any running build-and-push workflows to complete'
+    required: false
+    default: 'true'
+  response_mode:
+    description: 'Response mode: "auto" (detect intent), "patch" (force patch generation), "analysis" (analysis only), "opinion" (opinion/advice only)'
+    required: false
+    default: 'auto'
+  enable_visual_content:
+    description: 'Whether to enable generation of visual content (charts, plots, diagrams)'
+    required: false
+    default: 'true'
+  visual_content_format:
+    description: 'Preferred format for visual content: "mermaid", "ascii", "code", "all"'
+    required: false
+    default: 'all'
+  max_comment_length:
+    description: 'Maximum length for response comments (default: 65536)'
+    required: false
+    default: '65536'
+  # Multi-Context Support Parameters
+  context_mode:
+    description: 'Context handling mode: "auto" (detect), "pr" (force PR), "issue" (force issue), "review" (PR review)'
+    required: false
+    default: 'auto'
+  pr_strategy:
+    description: 'PR handling strategy: "continue" (update existing), "new" (create new)'
+    required: false
+    default: 'continue'
+  git_reference_mode:
+    description: 'Git reference mode: "auto" (context-based), "head" (latest), "base" (base branch), "pr_head" (PR head)'
+    required: false
+    default: 'auto'
+  enable_review_context:
+    description: 'Enable special handling for PR review comments'
+    required: false
+    default: 'true'
+  target_branch_strategy:
+    description: 'Target branch strategy: "auto" (context-based), "default" (main/master), "current" (current branch)'
+    required: false
+    default: 'auto'
+
+outputs:
+  patch_generated:
+    description: 'Whether a patch was generated'
+  patch_content:
+    description: 'The generated patch content'
+  execution_time:
+    description: 'Time taken for execution'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
+
+branding:
+  icon: 'cpu'
+  color: 'blue'

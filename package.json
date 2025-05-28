@@ -1,0 +1,37 @@
+{
+  "name": "swe-agent-resolver",
+  "version": "1.0.0",
+  "description": "[![Docker Build](https://github.com/nimishchaudhari/swe-agent-resolver/actions/workflows/build-docker-image.yml/badge.svg)](https://github.com/nimishchaudhari/swe-agent-resolver/actions/workflows/build-docker-image.yml) [![All-in-One Workflow](https://github.com/nimishchaudhari/swe-agent-resolver/actions/workflows/swe-agent-aio.yml/badge.svg)](https://github.com/nimishchaudhari/swe-agent-resolver/actions/workflows/swe-agent-aio.yml)",
+  "main": "dist/index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "start": "node dist/index.js",
+    "build": "tsc",
+    "lint": "eslint . --ext .ts",
+    "test": "jest --passWithNoTests",
+    "package": "ncc build src/index.ts -o dist"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@typescript-eslint/eslint-plugin": "^7.16.0",
+    "@typescript-eslint/parser": "^7.16.0",
+    "@vercel/ncc": "^0.38.1",
+    "eslint": "^8.57.0",
+    "execa": "^9.6.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.0",
+    "typescript": "^5.8.3",
+    "@types/node": "^22.15.23"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/exec": "^1.1.1",
+    "@actions/github": "^6.0.1",
+    "node-fetch": "^3.3.2"
+  }
+}

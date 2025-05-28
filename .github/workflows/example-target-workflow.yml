@@ -1,0 +1,53 @@
+name: SWE-Agent Issue Resolution
+
+on:
+  issue_comment:
+    types: [created, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+
+jobs:
+  resolve_issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Important for swe-agent to have full history
+
+      - name: Run SWE-Agent Resolver
+        # Replace <owner>/<repo> with the actual owner and repository name 
+        # where swe-agent-resolver is hosted if it's not the same repository.
+        # For example, if your action is in nimishchaudhari/swe-agent-resolver,
+        # and you are using a tagged version, it would be:
+        # uses: nimishchaudhari/swe-agent-resolver@v1.0.0 
+        # If you want to use the main branch from a different repository:
+        # uses: nimishchaudhari/swe-agent-resolver@main
+        # If the action is in the same repository, you can use:
+        uses: nimishchaudhari/swe-agent-resolver@javascript-backend # Or uses: <owner>/<repo>@<ref> if it's a separate repo
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # --- Required API Keys (at least one provider) ---
+          # Ensure these secrets are created in your target repository settings
+          # OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          # OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }} # Example, choose your provider
+
+          # --- Core Configuration (TypeScript Action) ---
+          MODEL_NAME: 'gpt-4.1-mini' # Or your preferred model
+          TRIGGER_PHRASE: '@swe-agent' # How the action is invoked
+          # CONFIG_FILE: '.github/swe-agent-config.json' # Optional: custom config for the TS action
+
+          # --- SWE-Agent Python Tool Configuration (if invoked by TypeScript) ---
+          # These are optional and can be set if you need to customize the python swe-agent behavior
+          # SWE_AGENT_MODEL_NAME: 'gpt-4o' # Model for the Python swe-agent if different
+          # SWE_AGENT_ARGS: |
+          #   --some-swe-agent-flag=value
+          # SWE_AGENT_SETUP_COMMANDS: |
+          #   pip install -r requirements-dev.txt
+
+          # --- Behavior Configuration (TypeScript Action) ---
+          # LOG_LEVEL: 'INFO' # 'DEBUG', 'INFO', 'WARNING', 'ERROR'
+          # MAX_COMMENT_LENGTH: '65536' # Max length for GitHub comments

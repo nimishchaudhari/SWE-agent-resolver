@@ -1,75 +1,66 @@
-# Multi-stage optimized build for faster Docker image creation
-# Stage 1: Base system with dependencies
-FROM ubuntu:24.04 AS base
+# /workspaces/swe-agent-resolver/Dockerfile
+# Dockerfile for TypeScript GitHub Action
 
-# Prevent interactive prompts during package installation
-ENV DEBIAN_FRONTEND=noninteractive
+# Use an official Node.js runtime as a parent image
+FROM node:20-slim AS builder
 
-# Install system packages in one layer for better caching
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3=3.12* \
-    python3-dev \
-    python3-pip \
-    python3-venv \
-    git \
-    jq \
-    curl \
-    build-essential \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
-
-# Stage 2: SWE-agent installation (cached layer)
-FROM base AS swe-agent-builder
-
-# Create virtual environment first (this layer can be cached)
-RUN python3 -m venv /opt/swe-agent-venv \
-    && /opt/swe-agent-venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel
-
-# Clone SWE-agent with specific commit for reproducibility
-# Using a specific commit hash instead of latest for better caching
-RUN git clone --depth 1 https://github.com/SWE-agent/SWE-agent.git /tmp/swe-agent
-
-# Install SWE-agent dependencies separately for better layer caching
-WORKDIR /tmp/swe-agent
-RUN if [ -f "requirements.txt" ]; then \
-        /opt/swe-agent-venv/bin/pip install --no-cache-dir -r requirements.txt; \
-    fi
-
-# Install SWE-agent in editable mode
-RUN /opt/swe-agent-venv/bin/pip install --no-cache-dir --editable .
-
-# Stage 3: Final runtime image
-FROM base AS runtime
-
-# Copy the virtual environment from builder stage
-COPY --from=swe-agent-builder /opt/swe-agent-venv /opt/swe-agent-venv
-COPY --from=swe-agent-builder /tmp/swe-agent /app/swe-agent
-
-# Add virtual environment to PATH
-ENV PATH="/opt/swe-agent-venv/bin:$PATH"
-
-# Set working directory
+# Set the working directory in the container
 WORKDIR /app
 
-# Copy application files (these change frequently, so put them last)
-COPY entrypoint.sh /entrypoint.sh
-COPY src/ /src/
+# Copy package.json and package-lock.json (or yarn.lock)
+COPY package*.json ./
 
-# Set permissions in a single layer
-RUN chmod +x /entrypoint.sh /src/*.sh
+# Install dependencies
+RUN npm ci
 
-# Display versions for verification (moved to end to avoid rebuilding)
-RUN echo "=== System Information ===" \
-    && echo "Git version: $(git --version)" \
-    && echo "Python version: $(python3 --version)" \
-    && echo "SWE-agent version: $(/opt/swe-agent-venv/bin/python -c 'import sweagent; print(getattr(sweagent, "__version__", "unknown"))' 2>/dev/null || echo 'installed')" \
-    && echo "Ubuntu version: $(cat /etc/os-release | grep PRETTY_NAME)" \
-    && echo "✅ Optimized Ubuntu 24.04 setup complete"
+# Copy the rest of the application code
+COPY . .
 
-# Health check to ensure the environment is working
+# Transpile TypeScript to JavaScript
+RUN npm run build --if-present
+
+# Prune dev dependencies
+RUN npm prune --production
+
+# Final stage
+FROM node:20-slim
+
+WORKDIR /app
+
+# Copy built application and node_modules from builder stage
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package*.json ./
+
+# Optional: If you have other assets or files needed at runtime, copy them here
+# For example, if swe-agent is still needed and invoked as a separate process:
+# COPY --from=swe-agent-builder /opt/swe-agent-venv /opt/swe-agent-venv
+# COPY --from=swe-agent-builder /tmp/swe-agent /app/swe-agent
+# ENV PATH="/opt/swe-agent-venv/bin:$PATH"
+
+# Define the entrypoint for the action
+# This will typically be node dist/index.js or similar
+# ENTRYPOINT ["node", "dist/index.js"] 
+# CMD is overridden by the action.yml, but good to have for local testing
+CMD ["node", "dist/index.js"]
+
+# Healthcheck (optional, but good practice)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python3 -c "import sys; print('Python OK')" && which git > /dev/null
+  CMD node -e "require('fs').existsSync('./dist/index.js') || process.exit(1)"
 
-# Set entrypoint
-ENTRYPOINT ["/entrypoint.sh"]
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Ensure scripts are executable if any are directly run by the container
+# RUN chmod +x /app/entrypoint.sh # Example if you had a shell entrypoint
+
+# Metadata
+LABEL name="swe-agent-resolver"
+LABEL description="GitHub Action to run SWE-agent and resolve issues."
+LABEL version="1.0.0"
+LABEL maintainer="[Your Name/Org]"
+
+# Display Node.js version
+RUN node --version
+RUN npm --version
