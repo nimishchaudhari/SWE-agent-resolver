@@ -48,8 +48,12 @@ CMD ["node", "/app/dist/index.js"]
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD node -e "require('fs').existsSync('./dist/index.js') || process.exit(1)"
 
+# Install Python, pip, git, and swe-agent
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
     git \
+    && pip3 install --no-cache-dir swe-agent \
     && rm -rf /var/lib/apt/lists/*
 
 # Ensure scripts are executable if any are directly run by the container
