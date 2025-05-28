@@ -9,8 +9,101 @@ inputs:
   CONFIG_FILE:
     description: 'Path to the configuration file for SWE-agent.'
     required: false
-    default: '.github/swe-agent-config.json' # Example default
-  # Add other inputs as needed by your TypeScript action
+    default: '.github/swe-agent-config.json'
+  MODEL_NAME:
+    description: 'The primary AI model name to use (e.g., gpt-4o, claude-3-opus-20240229).'
+    required: false
+    default: 'gpt-4o'
+  TRIGGER_PHRASE:
+    description: 'The phrase in comments that triggers the action.'
+    required: false
+    default: '@swe-agent'
+  LLM_API_KEY:
+    description: 'Generic LLM API key if a specific provider key is not used.'
+    required: false
+  OPENAI_API_KEY:
+    description: 'API key for OpenAI models.'
+    required: false
+  ANTHROPIC_API_KEY:
+    description: 'API key for Anthropic models.'
+    required: false
+  DEEPSEEK_API_KEY:
+    description: 'API key for DeepSeek models.'
+    required: false
+  OPENROUTER_API_KEY:
+    description: 'API key for OpenRouter.'
+    required: false
+  GEMINI_API_KEY:
+    description: 'API key for Google Gemini models.'
+    required: false
+  CODE_REVIEW_MODEL:
+    description: 'AI model to use specifically for code review tasks. Defaults to MODEL_NAME.'
+    required: false
+  OPENROUTER_MODEL_NAME:
+    description: 'Specific model name if using OpenRouter (e.g., google/gemini-flash-1.5).'
+    required: false
+  MODEL_TEMPERATURE:
+    description: 'Sampling temperature for the AI model (e.g., 0.7).'
+    required: false
+  MODEL_TOP_P:
+    description: 'Nucleus sampling (top_p) for the AI model (e.g., 0.9).'
+    required: false
+  MODEL_MAX_TOKENS:
+    description: 'Maximum number of tokens to generate in the AI response.'
+    required: false
+  RESPONSE_MODE:
+    description: "How the action responds ('auto', 'comment', 'pr', 'none')."
+    required: false
+    default: 'auto'
+  ENABLE_VISUAL_CONTENT:
+    description: "Enable generation of visual content like diagrams ('true' or 'false')."
+    required: false
+    default: 'false' # Assuming boolean inputs default to string 'false' if not specified by core.getBooleanInput
+  VISUAL_CONTENT_FORMAT:
+    description: "Format for visual content ('all', 'mermaid', 'ascii', 'code')."
+    required: false
+    default: 'all'
+  MAX_COMMENT_LENGTH:
+    description: 'Maximum length for GitHub comments.'
+    required: false
+    default: '65536'
+  CONTEXT_MODE:
+    description: "How context is gathered ('auto', 'issue', 'pr_comment', 'pr_review', 'pr_commit')."
+    required: false
+    default: 'auto'
+  PR_STRATEGY:
+    description: "Strategy for handling PRs ('continue', 'new', 'skip')."
+    required: false
+    default: 'continue'
+  GIT_REFERENCE_MODE:
+    description: "How Git references are handled ('auto', 'sha', 'branch')."
+    required: false
+    default: 'auto'
+  ENABLE_REVIEW_CONTEXT:
+    description: "Enable fetching PR review context ('true' or 'false')."
+    required: false
+    default: 'false' # Assuming boolean inputs default to string 'false'
+  TARGET_BRANCH_STRATEGY:
+    description: "Strategy for determining the target branch ('auto', 'default_branch', 'pr_target_branch')."
+    required: false
+    default: 'auto'
+  SWE_AGENT_IMAGE:
+    description: 'Docker image for the SWE-agent Python tool.'
+    required: false
+    default: 'ghcr.io/sweepai/swe-agent:latest'
+  SWE_AGENT_ARGS:
+    description: 'Additional arguments for the SWE-agent Python tool (multiline).'
+    required: false
+  SWE_AGENT_SETUP_COMMANDS:
+    description: 'Setup commands for the SWE-agent Python tool (multiline).'
+    required: false
+  SWE_AGENT_DATA_DIR:
+    description: 'Data directory for SWE-agent.'
+    required: false
+  LOG_LEVEL:
+    description: "Logging level ('DEBUG', 'INFO', 'WARNING', 'ERROR')."
+    required: false
+    default: 'INFO'
 
 runs:
   using: 'docker'
