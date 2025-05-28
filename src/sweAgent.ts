@@ -2,7 +2,7 @@ import { execa, Options as ExecaOptions } from 'execa';
 import * as fsPromises from 'fs/promises';
 import * as fs from 'fs'; // For createWriteStream
 import * as path from 'path';
-import { log, logError, logSuccess, logWarning } from './utils';
+import { log, logError, logSuccess, logWarning, calculatePatchStatistics, truncatePatchIfNeeded, PatchStatistics } from './utils'; // Added PatchStatistics, calculatePatchStatistics, truncatePatchIfNeeded
 import { Config } from './config';
 
 const SWE_AGENT_OUTPUT_DIR_NAME = '.swe_agent_output';
@@ -201,22 +201,32 @@ async function findPatchInOutput(outputDir: string): Promise<string | undefined>
 
 async function processSweAgentResults(
     result: SweAgentExecutionResult,
-    executionTimeSeconds: number,
-    // config: Config, // config might not be needed here if all info is in result or passed directly
     issueNumber?: number,
     issueTitle?: string
-): Promise<{ message: string; success: boolean; patch?: string }> {
+): Promise<{ message: string; success: boolean; patch?: string; stats?: PatchStatistics; wasTruncated?: boolean }> { // Updated return type
     
     const patchContent = await findPatchInOutput(result.outputDir);
+    let patchStats: PatchStatistics | undefined;
+    let wasTruncated = false;
+    let displayPatch = patchContent;
+
+    if (patchContent) {
+        patchStats = calculatePatchStatistics(patchContent);
+        const truncationResult = truncatePatchIfNeeded(patchContent); // Use a different variable name
+        displayPatch = truncationResult.truncatedPatch;
+        wasTruncated = truncationResult.wasTruncated;
+    }
 
     if (result.exitCode === 0 && patchContent) {
         logSuccess('SWE-Agent completed successfully with a patch.');
-        const message = `SWE-Agent finished in ${executionTimeSeconds}s and found a solution for issue #${issueNumber || 'N/A'}: ${issueTitle || 'N/A'}.\\n\\n\`\`\`diff\\n${patchContent}\\n\`\`\``;
-        return { message, success: true, patch: patchContent };
+        // The message for formatResponse will be constructed there, 
+        // here we just provide the raw data.
+        const message = `SWE-Agent found a solution for issue #${issueNumber || 'N/A'}: ${issueTitle || 'N/A'}.`;
+        return { message, success: true, patch: displayPatch, stats: patchStats, wasTruncated };
     } else if (result.exitCode === 0 && !patchContent) {
         logWarning('SWE-Agent completed successfully but no patch was found.');
-        const message = `SWE-Agent finished in ${executionTimeSeconds}s for issue #${issueNumber || 'N/A'}: ${issueTitle || 'N/A'}, but no patch was generated.`;
-        return { message, success: false };
+        const message = `SWE-Agent finished for issue #${issueNumber || 'N/A'}: ${issueTitle || 'N/A'}, but no patch was generated.`;
+        return { message, success: true, patch: undefined, stats: patchStats, wasTruncated: false }; // success true, but no patch
     } else {
         logError(`SWE-Agent execution failed with exit code: ${result.exitCode}`);
         let failureReason = `Unknown error (exit code: ${result.exitCode}).`;
@@ -225,8 +235,9 @@ async function processSweAgentResults(
         
         const logPreview = result.stderr || result.stdout || (await fsPromises.readFile(result.logFile, 'utf-8').catch(() => 'Could not read log file.')).slice(-1000);
 
-        const message = `SWE-Agent failed for issue #${issueNumber || 'N/A'}: ${issueTitle || 'N/A'} after ${executionTimeSeconds}s. Reason: ${failureReason}\\n\\nLog tail:\\n\`\`\`\\n${logPreview}\\n\`\`\``;
-        return { message, success: false };
+        // The execution time is part of the SweAgentExecutionResult or can be passed if needed by the caller for the message
+        const message = `SWE-Agent failed for issue #${issueNumber || 'N/A'}: ${issueTitle || 'N/A'}. Reason: ${failureReason}\\nLog tail:\\n\`\`\`\\n${logPreview}\\n\`\`\``;
+        return { message, success: false, patch: undefined, stats: undefined, wasTruncated: false };
     }
 }
 

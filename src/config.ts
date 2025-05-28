@@ -8,6 +8,7 @@ export interface Config {
   githubApiUrl: string;
   githubRepository: string;
   // AI Model Configuration
+  apiProvider?: string; // Added: Preferred API provider
   llmApiKey?: string; // Generic, if used
   openAiApiKey?: string;
   anthropicApiKey?: string;
@@ -52,6 +53,7 @@ export function loadConfig(): Config {
     githubApiUrl: process.env.GITHUB_API_URL || 'https://api.github.com',
     githubRepository: process.env.GITHUB_REPOSITORY || '',
 
+    apiProvider: core.getInput('API_PROVIDER'), // Added
     llmApiKey: core.getInput('LLM_API_KEY'),
     openAiApiKey: core.getInput('OPENAI_API_KEY'),
     anthropicApiKey: core.getInput('ANTHROPIC_API_KEY'),

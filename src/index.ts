@@ -10,6 +10,7 @@ import {
   SWE_AGENT_OUTPUT_DIR_NAME
 } from './sweAgent';
 import { getGitHubContext, postComment, addReaction, GitHubContext, Reaction } from './github'; // Added Reaction type
+import { formatResponse } from './responseFormatter'; // Import formatResponse
 // import { runSweAgentDiagnostics } from './sweAgent'; // Still commented out as per summary
 
 async function run(): Promise<void> {
@@ -64,8 +65,14 @@ async function run(): Promise<void> {
 
     if (nonPatchResponse) {
       core.info(`💬 Posting ${intent} response to GitHub...`);
-      // Corrected: postComment now gets octokit and repo details internally
-      await postComment(nonPatchResponse);
+      const formattedResponse = formatResponse({
+        intent,
+        content: nonPatchResponse,
+        githubContext,
+        executionTime: `${(Date.now() - startTime) / 1000}s`,
+        modelName: config.modelName,
+      });
+      await postComment(formattedResponse);
       core.info('✅ Non-patch request processed and response posted.');
       if (githubContext.commentId) {
         // Corrected: addReaction call
@@ -105,14 +112,21 @@ async function run(): Promise<void> {
       core.info('📝 Processing SWE-Agent results...');
       const finalReport = await processSweAgentResults(
         sweAgentResult,
-        sweAgentExecutionTime,
         githubContext.issueNumber, // issueNumber can be undefined, handle in processSweAgentResults if necessary
         githubContext.issueTitle || 'N/A'
       );
 
       core.info('💬 Posting SWE-Agent report to GitHub...');
-      // Corrected: postComment call
-      await postComment(finalReport.message);
+      const formattedPatchResponse = formatResponse({
+        intent: RequestIntent.Patch, // Explicitly set intent for patch
+        content: finalReport.patch || '', // Use finalReport.patch
+        githubContext,
+        executionTime: `${sweAgentExecutionTime}s`,
+        modelName: config.modelName,
+        patchStatistics: finalReport.stats, // Pass stats from sweAgentResult
+        wasTruncated: finalReport.wasTruncated, // Pass truncation status
+      });
+      await postComment(formattedPatchResponse);
 
       if (finalReport.success) {
         core.info('✅ SWE-Agent completed successfully.');
@@ -129,8 +143,14 @@ async function run(): Promise<void> {
       }
     } else {
       core.warning(`Intent "${intent}" was not processed by routing. Defaulting to no action.`);
-      // Corrected: postComment call
-      await postComment(`I received your request with intent "${intent}", but I am not configured to handle it at this moment.`);
+      const fallbackResponse = formatResponse({
+        intent: RequestIntent.Unknown, // Or a more specific fallback intent
+        content: `I received your request with intent "${intent}", but I am not configured to handle it at this moment.`,
+        githubContext,
+        executionTime: `${(Date.now() - startTime) / 1000}s`,
+        modelName: config.modelName,
+      });
+      await postComment(fallbackResponse);
     }
 
   } catch (error) {
@@ -141,8 +161,14 @@ async function run(): Promise<void> {
         try {
             const errMessageToPost = `The action failed with an error: ${errorMessage}`;
             core.info(`Attempting to post error to GitHub: ${errMessageToPost}`);
-            // Corrected: postComment call
-            await postComment(errMessageToPost);
+            const formattedErrorResponse = formatResponse({
+              intent: RequestIntent.Unknown, // Or a specific error intent if defined
+              content: errMessageToPost,
+              githubContext,
+              executionTime: `${(Date.now() - startTime) / 1000}s`, // Or a more relevant time
+              modelName: config?.modelName || 'N/A',
+            });
+            await postComment(formattedErrorResponse);
             if (githubContext.commentId) {
             // Corrected: addReaction call
             await addReaction('confused' as Reaction, githubContext.commentId);
