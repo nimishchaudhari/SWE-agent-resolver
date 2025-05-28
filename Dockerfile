@@ -42,7 +42,7 @@ COPY --from=builder /app/package*.json ./
 # This will typically be node dist/index.js or similar
 # ENTRYPOINT ["node", "dist/index.js"] 
 # CMD is overridden by the action.yml, but good to have for local testing
-CMD ["node", "dist/index.js"]
+CMD ["node", "/app/dist/index.js"]
 
 # Healthcheck (optional, but good practice)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
