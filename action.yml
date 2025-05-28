@@ -21,7 +21,7 @@ runs:
 
 outputs:
   RESULT_MESSAGE:
-    description: 'A message indicating the result of the agent's attempt.'
+    description: "A message indicating the result of the agent's attempt.""
   # Define other outputs as needed
 
 # Branding (optional)
