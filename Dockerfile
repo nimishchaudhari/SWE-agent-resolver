@@ -10,7 +10,7 @@ WORKDIR /app
 # Copy package.json and package-lock.json (or yarn.lock)
 COPY package*.json ./
 
-# Install dependencies
+# Install all dependencies (including dev dependencies for building)
 RUN npm ci
 
 # Copy the rest of the application code
@@ -19,8 +19,12 @@ COPY . .
 # Transpile TypeScript to JavaScript
 RUN npm run build --if-present
 
-# Prune dev dependencies
-RUN npm prune --production
+# Create a clean production install
+RUN rm -rf node_modules && npm ci --omit=dev
+
+# Verify execa is installed
+RUN ls -la node_modules/ | grep execa || echo "❌ execa not found in node_modules"
+RUN npm list execa --depth=0 || echo "❌ execa not found in npm list"
 
 # Stage 2: Python base with system dependencies
 FROM node:20-slim AS python-base
