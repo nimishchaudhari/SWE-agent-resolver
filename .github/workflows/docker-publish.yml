@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main # Or your default branch
+      - javascript-backend
     tags:
       - 'v*.*.*' # Also trigger on version tags
 
