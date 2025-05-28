@@ -34,6 +34,35 @@ setup_configuration() {
     export GIT_REFERENCE_MODE="${INPUT_GIT_REFERENCE_MODE:-auto}"
     export ENABLE_REVIEW_CONTEXT="${INPUT_ENABLE_REVIEW_CONTEXT:-true}"
     export TARGET_BRANCH_STRATEGY="${INPUT_TARGET_BRANCH_STRATEGY:-auto}"
+    
+    # GitHub Event Environment Variables (from GitHub Actions context)
+    export GITHUB_EVENT_ISSUE_TITLE="${GITHUB_EVENT_PATH:+$(jq -r '.issue.title // empty' "$GITHUB_EVENT_PATH" 2>/dev/null)}"
+    export GITHUB_EVENT_ISSUE_BODY="${GITHUB_EVENT_PATH:+$(jq -r '.issue.body // empty' "$GITHUB_EVENT_PATH" 2>/dev/null)}"
+    export GITHUB_EVENT_ISSUE_NUMBER="${GITHUB_EVENT_PATH:+$(jq -r '.issue.number // empty' "$GITHUB_EVENT_PATH" 2>/dev/null)}"
+    export GITHUB_EVENT_COMMENT_BODY="${GITHUB_EVENT_PATH:+$(jq -r '.comment.body // empty' "$GITHUB_EVENT_PATH" 2>/dev/null)}"
+    export GITHUB_EVENT_COMMENT_ID="${GITHUB_EVENT_PATH:+$(jq -r '.comment.id // empty' "$GITHUB_EVENT_PATH" 2>/dev/null)}"
+    export GITHUB_EVENT_NUMBER="${GITHUB_EVENT_PATH:+$(jq -r '.number // .issue.number // .pull_request.number // empty' "$GITHUB_EVENT_PATH" 2>/dev/null)}"
+    export GITHUB_EVENT_PULL_REQUEST_NUMBER="${GITHUB_EVENT_PATH:+$(jq -r '.pull_request.number // empty' "$GITHUB_EVENT_PATH" 2>/dev/null)}"
+    export GITHUB_EVENT_PULL_REQUEST_HEAD_SHA="${GITHUB_EVENT_PATH:+$(jq -r '.pull_request.head.sha // empty' "$GITHUB_EVENT_PATH" 2>/dev/null)}"
+    export GITHUB_EVENT_PULL_REQUEST_BASE_REF="${GITHUB_EVENT_PATH:+$(jq -r '.pull_request.base.ref // empty' "$GITHUB_EVENT_PATH" 2>/dev/null)}"
+    export GITHUB_EVENT_PULL_REQUEST_HEAD_REF="${GITHUB_EVENT_PATH:+$(jq -r '.pull_request.head.ref // empty' "$GITHUB_EVENT_PATH" 2>/dev/null)}"
+    
+    # Fallback to environment variables from context detection script
+    if [ -z "$GITHUB_EVENT_ISSUE_TITLE" ]; then
+        export GITHUB_EVENT_ISSUE_TITLE="${ISSUE_TITLE:-}"
+    fi
+    if [ -z "$GITHUB_EVENT_ISSUE_BODY" ]; then
+        export GITHUB_EVENT_ISSUE_BODY="${ISSUE_BODY:-}"
+    fi
+    if [ -z "$GITHUB_EVENT_ISSUE_NUMBER" ]; then
+        export GITHUB_EVENT_ISSUE_NUMBER="${ISSUE_NUMBER:-}"
+    fi
+    if [ -z "$GITHUB_EVENT_COMMENT_BODY" ]; then
+        export GITHUB_EVENT_COMMENT_BODY="${COMMENT_BODY:-}"
+    fi
+    if [ -z "$GITHUB_EVENT_NUMBER" ]; then
+        export GITHUB_EVENT_NUMBER="${ISSUE_NUMBER:-${PR_NUMBER:-}}"
+    fi
 }
 
 # Validate required configuration
