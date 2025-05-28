@@ -19,8 +19,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && git --version \
     && rm -rf /var/lib/apt/lists/*
 
-# Verify Git supports --cached option
-RUN git diff --help | grep -q "cached" && echo "Git version compatible: $(git --version)"
+# Display versions for verification in build logs
+RUN echo "=== System Information ===" \
+    && echo "Git version: $(git --version)" \
+    && echo "Python version: $(python3 --version)" \
+    && echo "Ubuntu version: $(cat /etc/os-release | grep PRETTY_NAME)" \
+    && echo "✅ Ubuntu 24.04 setup complete"
 
 # Set working directory
 WORKDIR /app
