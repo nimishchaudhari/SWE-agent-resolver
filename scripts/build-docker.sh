@@ -19,14 +19,18 @@ if ! docker system info >/dev/null 2>&1; then
     exit 1
 fi
 
-# Build with BuildKit for better caching
+# Build with BuildKit for better caching and multi-stage builds
 export DOCKER_BUILDKIT=1
 
-# Build the image (single platform for local builds)
+# Build the image with enhanced caching (single platform for local builds)
+echo "🔧 Building with enhanced caching and multi-stage optimization..."
 docker build \
     --tag "${REGISTRY}/${IMAGE_NAME}:${TAG}" \
     --tag "${REGISTRY}/${IMAGE_NAME}:$(git rev-parse --short HEAD)" \
     --build-arg BUILDKIT_INLINE_CACHE=1 \
+    --build-arg DOCKER_BUILDKIT=1 \
+    --target runtime \
+    --cache-from "${REGISTRY}/${IMAGE_NAME}:cache" \
     .
 
 # Push the image
