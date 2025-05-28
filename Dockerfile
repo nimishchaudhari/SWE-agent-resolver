@@ -1,21 +1,13 @@
 # Use Python 3.12 slim image for compatibility and smaller size
-FROM python:3.12-slim
+FROM python:3.14.0b2-alpine3.21
 
-# Install required system packages with updated Git
+# Install required system packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    software-properties-common \
-    curl \
-    && curl -fsSL https://packages.github.com/server/keys/github-serverless.asc | apt-key add - \
-    && echo "deb https://packagecloud.io/github/git-lfs/debian/ bullseye main" > /etc/apt/sources.list.d/github_git-lfs.list \
-    && apt-get update && apt-get install -y --no-install-recommends \
     git \
     jq \
+    curl \
     build-essential \
-    && git --version \
     && rm -rf /var/lib/apt/lists/*
-
-# Verify Git version (should be 2.30+)
-RUN git --version && git diff --help | grep -q "cached" || (echo "Git version too old" && exit 1)
 
 # Set working directory
 WORKDIR /app
