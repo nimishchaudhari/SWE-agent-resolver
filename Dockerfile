@@ -1,22 +1,19 @@
-# Use Ubuntu 24.04 LTS for latest Git version and better Python 3.12 support
+# Use Ubuntu 24.04 LTS for latest Git version and Python 3.12
 FROM ubuntu:24.04
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install Python 3.12 and modern Git (Ubuntu 24.04 has Python 3.12 by default)
+# Install system packages including Python 3.12 (default in Ubuntu 24.04)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.12 \
-    python3.12-dev \
-    python3.12-venv \
+    python3 \
+    python3-dev \
     python3-pip \
+    python3-venv \
     git \
     jq \
     curl \
     build-essential \
-    && ln -sf /usr/bin/python3.12 /usr/bin/python3 \
-    && ln -sf /usr/bin/python3.12 /usr/bin/python \
-    && git --version \
     && rm -rf /var/lib/apt/lists/*
 
 # Display versions for verification in build logs
@@ -29,16 +26,17 @@ RUN echo "=== System Information ===" \
 # Set working directory
 WORKDIR /app
 
-# Install pip for Python 3.12
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
-
 # Clone and install SWE-agent (latest version)
 RUN git clone --depth 1 https://github.com/SWE-agent/SWE-agent.git ./swe-agent
 
-# Install SWE-agent and dependencies
+# Install SWE-agent and dependencies using virtual environment to avoid PEP 668 issues
 RUN cd /app/swe-agent && \
-    python -m pip install --upgrade pip && \
-    pip install --no-cache-dir --editable .
+    python3 -m venv /opt/swe-agent-venv && \
+    /opt/swe-agent-venv/bin/pip install --upgrade pip && \
+    /opt/swe-agent-venv/bin/pip install --editable .
+
+# Add virtual environment to PATH
+ENV PATH="/opt/swe-agent-venv/bin:$PATH"
 
 # Copy entrypoint script and source files
 COPY entrypoint.sh /entrypoint.sh
