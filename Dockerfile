@@ -53,7 +53,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     git \
-    && pip3 install --no-cache-dir swe-agent \
+    && pip3 install --no-cache-dir --break-system-packages swe-agent \
     && rm -rf /var/lib/apt/lists/*
 
 # Ensure scripts are executable if any are directly run by the container
