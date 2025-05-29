@@ -1,42 +1,110 @@
-name: 'SWE-Agent GitHub Action'
-description: 'Automated software engineering agent for GitHub repositories'
-author: 'Your Organization'
+name: 'SWE-Agent Resolver'
+description: 'AI-powered code assistance using SWE-agent with LiteLLM support for multiple AI providers'
+author: 'nimishchaudhari'
+
+branding:
+  icon: 'code'
+  color: 'blue'
 
 inputs:
-  github-token:
-    description: 'GitHub token for API access'
+  model_name:
+    description: 'LiteLLM-compatible model identifier (e.g., gpt-4o, claude-3-5-sonnet-latest, deepseek/deepseek-chat)'
     required: true
-  webhook-secret:
-    description: 'Secret for validating GitHub webhooks'
-    required: true
-  swe-agent-timeout:
-    description: 'Timeout for SWE-Agent operations in milliseconds'
+    default: 'gpt-4o'
+  
+  trigger_phrase:
+    description: 'Phrase to trigger the action in comments'
     required: false
-    default: '300000'
-  max-concurrent-jobs:
-    description: 'Maximum number of concurrent SWE-Agent jobs'
+    default: '@swe-agent'
+  
+  max_cost:
+    description: 'Maximum cost limit for SWE-agent execution (USD)'
     required: false
-    default: '3'
-  log-level:
-    description: 'Logging level (error, warn, info, debug)'
+    default: '5.00'
+  
+  allowed_tools:
+    description: 'Comma-separated list of tools SWE-agent can use'
     required: false
-    default: 'info'
+    default: 'str_replace_editor,bash,file_viewer,python_executor'
+  
+  deployment_type:
+    description: 'Execution environment for SWE-agent'
+    required: false
+    default: 'local'
+  
+  custom_instructions:
+    description: 'Additional context or constraints for the AI agent'
+    required: false
+    default: ''
+  
+  fallback_models:
+    description: 'Comma-separated list of backup models if primary fails'
+    required: false
+    default: 'gpt-3.5-turbo,claude-3-haiku-20240307'
+  
+  workspace_timeout:
+    description: 'Timeout for SWE-agent execution in seconds'
+    required: false
+    default: '1800'
+  
+  debug_mode:
+    description: 'Enable debug logging and detailed output'
+    required: false
+    default: 'false'
 
 outputs:
-  server-url:
-    description: 'URL of the running webhook server'
-    value: 'http://localhost:3000'
+  execution_status:
+    description: 'Status of the SWE-agent execution (success, failure, timeout)'
+  
+  provider_used:
+    description: 'AI provider that was actually used for execution'
+  
+  cost_estimate:
+    description: 'Estimated cost of the execution'
+  
+  patch_applied:
+    description: 'Whether a code patch was successfully applied'
+  
+  comment_url:
+    description: 'URL of the status comment created by the action'
 
 runs:
   using: 'docker'
   image: 'Dockerfile'
   env:
-    GITHUB_TOKEN: ${{ inputs.github-token }}
-    GITHUB_WEBHOOK_SECRET: ${{ inputs.webhook-secret }}
-    SWE_AGENT_TIMEOUT: ${{ inputs.swe-agent-timeout }}
-    MAX_CONCURRENT_JOBS: ${{ inputs.max-concurrent-jobs }}
-    LOG_LEVEL: ${{ inputs.log-level }}
-
-branding:
-  icon: 'cpu'
-  color: 'blue'
+    GITHUB_TOKEN: ${{ github.token }}
+    # Provider-specific API keys (auto-detected based on model_name)
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+    AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
+    AZURE_OPENAI_API_VERSION: ${{ vars.AZURE_OPENAI_API_VERSION }}
+    OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+    GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+    TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+    MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+    COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+    PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+    ANYSCALE_API_KEY: ${{ secrets.ANYSCALE_API_KEY }}
+    # Custom endpoints (optional)
+    CUSTOM_LLM_BASE_URL: ${{ vars.CUSTOM_LLM_BASE_URL }}
+    CUSTOM_LLM_API_KEY: ${{ secrets.CUSTOM_LLM_API_KEY }}
+    # GitHub repository context
+    GITHUB_REPOSITORY: ${{ github.repository }}
+    GITHUB_EVENT_NAME: ${{ github.event_name }}
+    GITHUB_EVENT_PATH: ${{ github.event_path }}
+    GITHUB_WORKSPACE: ${{ github.workspace }}
+    GITHUB_SHA: ${{ github.sha }}
+    GITHUB_REF: ${{ github.ref }}
+    GITHUB_ACTOR: ${{ github.actor }}
+    # Action inputs
+    INPUT_MODEL_NAME: ${{ inputs.model_name }}
+    INPUT_TRIGGER_PHRASE: ${{ inputs.trigger_phrase }}
+    INPUT_MAX_COST: ${{ inputs.max_cost }}
+    INPUT_ALLOWED_TOOLS: ${{ inputs.allowed_tools }}
+    INPUT_DEPLOYMENT_TYPE: ${{ inputs.deployment_type }}
+    INPUT_CUSTOM_INSTRUCTIONS: ${{ inputs.custom_instructions }}
+    INPUT_FALLBACK_MODELS: ${{ inputs.fallback_models }}
+    INPUT_WORKSPACE_TIMEOUT: ${{ inputs.workspace_timeout }}
+    INPUT_DEBUG_MODE: ${{ inputs.debug_mode }}

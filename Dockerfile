@@ -1,45 +1,76 @@
-FROM node:18-slim
+# Multi-stage build for SWE-Agent GitHub Action with LiteLLM
+FROM python:3.11-slim AS python-base
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     git \
     curl \
-    python3 \
-    python3-pip \
+    wget \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Create app directory
-WORKDIR /app
+# Install SWE-Agent and LiteLLM
+RUN pip install --no-cache-dir \
+    swe-agent \
+    litellm \
+    openai \
+    anthropic \
+    pyyaml \
+    requests \
+    jinja2
 
-# Copy package files
+# Create SWE-Agent workspace
+RUN mkdir -p /swe-agent-workspace && chmod 755 /swe-agent-workspace
+
+# Stage 2: Node.js runtime with Python
+FROM node:18-slim
+
+# Install system dependencies including Python
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    python3 \
+    python3-pip \
+    python3-venv \
+    build-essential \
+    docker.io \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python dependencies from previous stage
+COPY --from=python-base /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=python-base /usr/local/bin /usr/local/bin
+
+# Create action directory
+WORKDIR /action
+
+# Copy package files and install Node.js dependencies
 COPY package*.json ./
-
-# Install Node.js dependencies
 RUN npm ci --only=production
 
-# Install SWE-Agent (placeholder - adjust based on actual installation method)
-RUN pip3 install swe-agent || echo "SWE-Agent installation placeholder"
+# Copy action source code
+COPY src/ ./src/
+COPY action/ ./action/
 
-# Create non-root user
-RUN useradd -m -u 1001 sweagent
-RUN chown -R sweagent:sweagent /app
+# Create workspace and cache directories
+RUN mkdir -p /swe-agent-workspace && \
+    mkdir -p /tmp/swe-agent-cache && \
+    mkdir -p /github/workspace && \
+    chmod 755 /swe-agent-workspace /tmp/swe-agent-cache /github/workspace
 
-# Copy application code
-COPY --chown=sweagent:sweagent src/ ./src/
+# Create non-root user for execution
+RUN useradd -m -u 1001 sweagent && \
+    chown -R sweagent:sweagent /action /swe-agent-workspace /tmp/swe-agent-cache
 
-# Create tmp directory for job execution
-RUN mkdir -p /tmp/swe-agent-jobs && chown sweagent:sweagent /tmp/swe-agent-jobs
+# Set Python path for SWE-Agent
+ENV PYTHONPATH="/usr/local/lib/python3.11/site-packages:$PYTHONPATH"
+ENV PATH="/usr/local/bin:$PATH"
 
-# Switch to non-root user
+# GitHub Actions environment
+ENV GITHUB_ACTIONS=true
+ENV CI=true
+
+# Switch to non-root user for security
 USER sweagent
 
-# Expose port
-EXPOSE 3000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3000/health || exit 1
-
-# Start the application
-CMD ["npm", "start"]
+# Entry point for GitHub Action
+ENTRYPOINT ["node", "/action/action/entrypoint.js"]
