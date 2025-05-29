@@ -1,335 +1,486 @@
-# SWE-Agent Issue Resolver
+# 🤖 SWE-Agent Resolver
 
-[![Docker Build](https://github.com/nimishchaudhari/swe-agent-resolver/actions/workflows/build-docker-image.yml/badge.svg)](https://github.com/nimishchaudhari/swe-agent-resolver/actions/workflows/build-docker-image.yml)
-[![All-in-One Workflow](https://github.com/nimishchaudhari/swe-agent-resolver/actions/workflows/swe-agent-aio.yml/badge.svg)](https://github.com/nimishchaudhari/swe-agent-resolver/actions/workflows/swe-agent-aio.yml)
+**AI-powered GitHub Action for automated code assistance using SWE-agent with LiteLLM multi-provider support**
 
-A sophisticated GitHub Action that leverages AI to automatically analyze and resolve software engineering issues. Built with a modular architecture for reliability, extensibility, and maintainability.
+[![GitHub Action](https://img.shields.io/badge/GitHub%20Action-available-blue)](https://github.com/marketplace/actions/swe-agent-resolver)
+[![Docker](https://img.shields.io/badge/Docker-supported-blue)](https://hub.docker.com/r/nimishchaudhari/swe-agent-resolver)
+[![LiteLLM](https://img.shields.io/badge/LiteLLM-integrated-green)](https://github.com/BerriAI/litellm)
 
-## 🚀 Quick Start
-
-### Automatic Setup (Recommended)
-
-Simply mention the agent in any issue comment, and it will automatically analyze and provide solutions:
-
-```
-@swe-agent Please fix this bug
-@swe-agent Implement this feature  
-@swe-agent Analyze this performance issue
-@swe-agent Please comment today's date
-```
-
-### Manual Workflow Setup
-
-Add this to your `.github/workflows/swe-agent.yml`:
-
-```yaml
-name: SWE-Agent Issue Resolution
-on:
-  issue_comment:
-    types: [created]
-
-jobs:
-  resolve-issue:
-    runs-on: ubuntu-latest
-    if: contains(github.event.comment.body, '@swe-agent')
-    steps:
-      - uses: nimishchaudhari/swe-agent-resolver@main
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
-```
+Transform your repository into an AI-powered development environment where you can simply comment `@swe-agent fix this bug` and get intelligent code assistance from multiple AI providers.
 
 ## ✨ Features
 
-### Core Capabilities
-- **🤖 Smart AI Integration**: Supports multiple AI providers (OpenAI, Anthropic, Google Gemini, OpenRouter)
-- **🔍 Automatic Context Detection**: Intelligently detects issue context, PR context, and review context
-- **⚡ Instant Activation**: Just mention `@swe-agent` in any issue or PR comment
-- **🎯 Intent Recognition**: Automatically determines whether to generate patches, provide analysis, or give advice
-- **📊 Visual Content**: Generates charts, diagrams, and visual representations when helpful
+### 🔌 Universal AI Provider Support
+- **OpenAI**: GPT-4, GPT-3.5-turbo, GPT-4-turbo
+- **Anthropic**: Claude 3.5 Sonnet, Claude 3 Haiku, Claude 3 Opus
+- **Azure OpenAI**: Enterprise-grade deployment
+- **DeepSeek**: Cost-effective coding models
+- **OpenRouter**: Access to 100+ models including Llama, Qwen
+- **Groq**: Ultra-fast inference
+- **Together AI**: Open-source model hosting
+- **Mistral**: European AI models
+- **Custom/Local**: Your own LLM endpoints
 
-### Multi-Context Support
-- **📝 Issue Comments**: Analyzes issues and creates pull requests with fixes
-- **🔄 PR Comments**: Updates existing pull requests with improvements
-- **👁️ PR Reviews**: Responds to code review feedback with targeted fixes
-- **🔀 PR Synchronization**: Handles pull request updates and conflicts
+### 🎯 Smart Trigger System
+- Comment-based activation: `@swe-agent analyze this issue`
+- Model override: `@swe-agent using deepseek/deepseek-chat fix this`
+- Automatic issue and PR analysis
+- Context-aware responses
 
-### Technical Excellence
-- **🐳 Docker-Based**: Consistent execution environment with branch-specific image selection
-- **⏱️ Smart Timeouts**: Configurable execution limits with intelligent wait logic
-- **🔧 Modular Architecture**: Clean separation of concerns with reusable components
-- **📈 Progress Tracking**: Real-time progress updates and detailed logging
-- **🧪 Comprehensive Testing**: Extensive validation scripts and automated testing
+### 💰 Cost Management
+- Real-time cost estimation per provider
+- Configurable spending limits
+- Automatic fallback to cheaper models
+- Provider-specific optimization
+
+### 🔄 Intelligent Fallbacks
+- Multi-provider redundancy
+- Automatic model switching on failures
+- Rate limit handling
+- Cost-based provider selection
 
 ## 🚀 Quick Start
 
-### Advanced Configuration
+### 1. Add to Your Repository
+
+Create `.github/workflows/swe-agent.yml`:
 
 ```yaml
-name: Advanced SWE-Agent Setup
+name: SWE-Agent Assistant
+
 on:
+  issues:
+    types: [opened, edited]
+  pull_request:
+    types: [opened, edited, synchronize]
   issue_comment:
     types: [created]
   pull_request_review_comment:
     types: [created]
-  pull_request_review:
-    types: [submitted]
-  pull_request:
-    types: [opened, synchronize]
 
 jobs:
   swe-agent:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    if: contains(github.event.comment.body, '@swe-agent') || contains(github.event.review.body, '@swe-agent') || contains(github.event.pull_request.body, '@swe-agent')
-    
     steps:
-      - uses: nimishchaudhari/swe-agent-resolver@main
+      - name: AI Code Assistant
+        uses: nimishchaudhari/swe-agent-resolver@v1
         with:
-          # Required Parameters
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
-          
-          # Optional AI Provider Keys
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
-          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
-          
-          # Configuration
-          model_name: ${{ vars.SWE_AGENT_MODEL || 'gpt-4o' }}
-          timeout_minutes: '50'
-          response_mode: 'auto'  # auto, patch, analysis, opinion
-          enable_visual_content: 'true'
-          
-          # Multi-context settings
-          context_mode: 'auto'
-          pr_strategy: 'continue'
-          enable_review_context: 'true'
+          model_name: 'gpt-4o'
+          trigger_phrase: '@swe-agent'
+          max_cost: '5.00'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```
 
-## ⚙️ Configuration
+### 2. Configure Your Secrets
 
-### Required Environment Variables
+Add to repository secrets (Settings → Secrets and variables → Actions):
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `GITHUB_TOKEN` | GitHub API token with repo permissions | `${{ secrets.GITHUB_TOKEN }}` |
-| `OPENAI_API_KEY` | OpenAI API key for AI processing | `${{ secrets.OPENAI_API_KEY }}` |
+```bash
+# Required
+GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Automatically available
 
-### Optional Parameters
+# Choose your AI provider (add one or more)
+OPENAI_API_KEY: sk-...                     # OpenAI API key
+ANTHROPIC_API_KEY: sk-ant-...              # Anthropic API key
+DEEPSEEK_API_KEY: sk-...                   # DeepSeek API key
+OPENROUTER_API_KEY: sk-or-...              # OpenRouter API key
+```
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `timeout_minutes` | `20` | Maximum execution time in minutes |
-| `max_iterations` | `5` | Maximum AI analysis iterations |
-| `ai_model` | `"gpt-4"` | AI model to use for analysis |
-| `analysis_depth` | `"standard"` | Analysis depth: `quick`, `standard`, `comprehensive` |
-| `custom_instructions` | `""` | Additional instructions for the AI |
+### 3. Start Using
+
+Comment on any issue or PR:
+```
+@swe-agent analyze this bug and suggest a fix
+@swe-agent review this code for security issues
+@swe-agent using claude-3-5-sonnet-latest refactor this function
+```
+
+## 📊 Provider Comparison
+
+| Provider | Models | Cost (per 1M tokens) | Speed | Best For |
+|----------|---------|---------------------|-------|----------|
+| **OpenAI** | GPT-4o, GPT-4, GPT-3.5 | $1.50-$15.00 | Fast | General purpose, coding |
+| **Anthropic** | Claude 3.5 Sonnet | $3.00-$15.00 | Medium | Code analysis, reasoning |
+| **DeepSeek** | DeepSeek-Chat, DeepSeek-Coder | $0.14-$0.28 | Fast | 🏆 **Most cost-effective** |
+| **OpenRouter** | 100+ models | $0.50-$10.00 | Varies | Model diversity |
+| **Groq** | Llama, Mixtral | $0.27 | ⚡ **Fastest** | Quick responses |
+| **Azure** | GPT-4, GPT-3.5 | Custom | Fast | 🏢 **Enterprise** |
+
+## 🔧 Configuration
+
+### Basic Configuration
+
+```yaml
+- name: SWE-Agent Resolver
+  uses: nimishchaudhari/swe-agent-resolver@v1
+  with:
+    model_name: 'gpt-4o'                    # AI model to use
+    trigger_phrase: '@swe-agent'            # Trigger phrase in comments
+    max_cost: '5.00'                        # Maximum cost per execution ($)
+    allowed_tools: 'str_replace_editor,bash,file_viewer,python_executor'
+    custom_instructions: 'Follow our coding standards'
+```
 
 ### Advanced Configuration
 
-#### Multiple AI Providers
 ```yaml
-- uses: your-org/swe-agent-resolver@main
+- name: SWE-Agent Resolver
+  uses: nimishchaudhari/swe-agent-resolver@v1
   with:
-    # Primary provider
-    openai_api_key: ${{ secrets.OPENAI_API_KEY }}
-    
-    # Fallback providers
-    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-    google_api_key: ${{ secrets.GOOGLE_API_KEY }}
+    model_name: 'claude-3-5-sonnet-latest'
+    trigger_phrase: '@swe-agent'
+    max_cost: '8.00'
+    allowed_tools: 'str_replace_editor,bash,file_viewer,python_executor,git_tool'
+    deployment_type: 'local'
+    custom_instructions: 'Follow TDD practices and include comprehensive tests'
+    fallback_models: 'gpt-4o,deepseek/deepseek-chat'
+    workspace_timeout: '2400'               # 40 minutes
+    debug_mode: 'true'
 ```
 
-#### Custom Docker Image
+## 🔑 Provider Setup Guides
+
+### OpenAI Setup
+
+1. **Get API Key**: Visit [OpenAI API](https://platform.openai.com/api-keys)
+2. **Add to Secrets**: `OPENAI_API_KEY`
+3. **Models**: `gpt-4o`, `gpt-4`, `gpt-3.5-turbo`
+
 ```yaml
-- uses: your-org/swe-agent-resolver@main
-  with:
-    docker_image: "your-org/swe-agent-resolver:custom-tag"
+env:
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```
 
-## 🏗️ Architecture
+**Cost**: $1.50-$15.00 per 1M tokens
 
-### Modular Design
+### Anthropic Claude Setup
 
-```
-src/
-├── utils.sh           # Core utilities and logging
-├── config.sh          # Configuration management
-├── github.sh          # GitHub API integration
-├── intent.sh          # Issue analysis and intent detection
-├── progress.sh        # Progress tracking and reporting
-├── ai_api.sh          # AI provider abstraction
-├── response_formatter.sh # Output formatting
-└── swe_agent.sh       # Main orchestration logic
-```
+1. **Get API Key**: Visit [Anthropic Console](https://console.anthropic.com/)
+2. **Add to Secrets**: `ANTHROPIC_API_KEY`
+3. **Models**: `claude-3-5-sonnet-latest`, `claude-3-haiku-20240307`
 
-### Workflow Components
-
-```
-.github/workflows/
-├── swe-agent-aio.yml       # Main issue resolution workflow
-└── build-docker-image.yml  # Container build automation
+```yaml
+with:
+  model_name: 'claude-3-5-sonnet-latest'
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-### Testing Infrastructure
+**Cost**: $3.00-$15.00 per 1M tokens
 
+### DeepSeek Setup (Most Cost-Effective)
+
+1. **Get API Key**: Visit [DeepSeek API](https://platform.deepseek.com/)
+2. **Add to Secrets**: `DEEPSEEK_API_KEY`
+3. **Models**: `deepseek/deepseek-chat`, `deepseek/deepseek-coder`
+
+```yaml
+with:
+  model_name: 'deepseek/deepseek-chat'
+  max_cost: '2.00'  # Lower cost needed
+env:
+  DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
 ```
-test/
-├── validate-full-setup.sh    # Comprehensive validation
-├── validate-docker-setup.sh  # Docker-specific tests
-├── quick-sanity-check.sh     # Fast validation
-└── final-status-report.sh    # Status reporting
+
+**Cost**: $0.14-$0.28 per 1M tokens ⭐ **Best value**
+
+### OpenRouter Setup (100+ Models)
+
+1. **Get API Key**: Visit [OpenRouter](https://openrouter.ai/keys)
+2. **Add to Secrets**: `OPENROUTER_API_KEY`
+3. **Models**: `openrouter/anthropic/claude-3.5-sonnet`, `openrouter/qwen/qwen-32b`
+
+```yaml
+with:
+  model_name: 'openrouter/anthropic/claude-3.5-sonnet'
+env:
+  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 ```
 
-## 🔧 Development
+**Cost**: Varies by model ($0.50-$10.00 per 1M tokens)
 
-### Local Testing
+### Azure OpenAI Setup (Enterprise)
+
+1. **Create Azure OpenAI Resource**
+2. **Deploy Model** (e.g., GPT-4)
+3. **Add Secrets**:
+   - `AZURE_OPENAI_API_KEY`
+   - `AZURE_OPENAI_ENDPOINT` (as repository variable)
+   - `AZURE_OPENAI_API_VERSION` (as repository variable)
+
+```yaml
+with:
+  model_name: 'azure/gpt-4'  # Must match deployment name
+env:
+  AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+  AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
+  AZURE_OPENAI_API_VERSION: ${{ vars.AZURE_OPENAI_API_VERSION }}
+```
+
+### Groq Setup (Fastest)
+
+1. **Get API Key**: Visit [Groq Console](https://console.groq.com/keys)
+2. **Add to Secrets**: `GROQ_API_KEY`
+3. **Models**: `groq/llama2-70b-4096`, `groq/mixtral-8x7b-32768`
+
+```yaml
+with:
+  model_name: 'groq/llama2-70b-4096'
+env:
+  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+```
+
+**Cost**: $0.27 per 1M tokens ⚡ **Fastest inference**
+
+## 🎯 Usage Examples
+
+### Issue Analysis
+```
+@swe-agent analyze this authentication bug
+```
+
+### Pull Request Review
+```
+@swe-agent review this PR for security vulnerabilities
+```
+
+### Code Improvement
+```
+@swe-agent refactor this function to improve performance
+```
+
+### Model-Specific Requests
+```
+@swe-agent using deepseek/deepseek-coder optimize this algorithm
+@swe-agent using claude-3-5-sonnet-latest provide detailed code review
+```
+
+### Custom Instructions
+```
+@swe-agent fix this bug and include unit tests following our TDD practices
+```
+
+## 🔄 Multi-Provider Fallback Example
+
+```yaml
+name: Robust AI Assistant
+
+jobs:
+  swe-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - name: AI Assistant with Fallbacks
+        uses: nimishchaudhari/swe-agent-resolver@v1
+        with:
+          model_name: 'claude-3-5-sonnet-latest'     # Primary (best quality)
+          fallback_models: 'gpt-4o,deepseek/deepseek-chat,groq/llama2-70b-4096'
+          max_cost: '6.00'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Multiple providers for redundancy
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+```
+
+**Fallback Strategy**:
+1. Try Claude 3.5 Sonnet (best quality)
+2. Fallback to GPT-4o if Claude fails
+3. Fallback to DeepSeek (cost-effective)
+4. Final fallback to Groq (fastest)
+
+## 💡 Cost Optimization Tips
+
+### Budget-Friendly Setup
+```yaml
+with:
+  model_name: 'deepseek/deepseek-chat'  # $0.14 per 1M tokens
+  max_cost: '1.00'                      # $1 limit
+  fallback_models: 'groq/llama2-70b-4096,gpt-3.5-turbo'
+```
+
+### High-Quality Setup
+```yaml
+with:
+  model_name: 'claude-3-5-sonnet-latest'  # Best reasoning
+  max_cost: '10.00'                       # Higher budget
+  fallback_models: 'gpt-4o,claude-3-haiku-20240307'
+```
+
+### Balanced Setup
+```yaml
+with:
+  model_name: 'gpt-4o'                 # Good balance
+  max_cost: '5.00'                     # Moderate budget
+  fallback_models: 'deepseek/deepseek-chat,groq/llama2-70b-4096'
+```
+
+## 🛠️ Development
+
+### Local Development
 
 ```bash
-# Quick validation
-./test/quick-sanity-check.sh
+# Clone repository
+git clone https://github.com/nimishchaudhari/swe-agent-resolver
+cd swe-agent-resolver
 
-# Comprehensive testing
-./test/validate-full-setup.sh
+# Install dependencies
+npm install
 
-# Docker validation
-./test/validate-docker-setup.sh
-```
-
-### Building Locally
-
-```bash
 # Build Docker image
-docker build -t swe-agent-resolver:local .
+docker build -t swe-agent-resolver .
 
 # Test locally
-docker run --rm \
-  -e GITHUB_TOKEN="your-token" \
-  -e OPENAI_API_KEY="your-key" \
-  swe-agent-resolver:local
+docker run -e GITHUB_TOKEN=... -e OPENAI_API_KEY=... swe-agent-resolver
 ```
 
-### Contributing
+### Testing
 
-1. **Fork the repository**
-2. **Create a feature branch**: `git checkout -b feature/your-feature`
-3. **Run tests**: `./test/validate-full-setup.sh`
-4. **Commit changes**: `git commit -am 'Add your feature'`
-5. **Push to branch**: `git push origin feature/your-feature`
-6. **Create Pull Request**
+```bash
+# Run tests
+npm test
 
-## 🐛 Troubleshooting
+# Run integration tests
+npm run test:integration
 
-### Common Issues
-
-#### "No such file or directory" Error
-**Cause**: Script execution before repository checkout  
-**Solution**: Ensure `actions/checkout` runs before SWE-Agent action
-
-```yaml
-steps:
-  - name: Checkout Repository
-    uses: actions/checkout@v4  # Must be first!
-    
-  - name: Run SWE-Agent
-    uses: your-org/swe-agent-resolver@main
+# Test specific provider
+npm run test:provider -- --provider=openai
 ```
 
-#### Docker Image Not Found
-**Cause**: Branch-specific image doesn't exist  
-**Solution**: The action automatically falls back to `:latest`. Check Docker build logs.
+## 📚 Advanced Features
 
-#### Timeout Issues
-**Cause**: Complex issues exceeding time limits  
-**Solution**: Increase `timeout_minutes` parameter
+### Custom Tools Configuration
 
 ```yaml
-- uses: your-org/swe-agent-resolver@main
-  with:
-    timeout_minutes: 45  # Increased from default 20
+with:
+  allowed_tools: 'str_replace_editor,bash,file_viewer,python_executor,git_tool,node_executor'
 ```
 
-#### AI API Rate Limits
-**Cause**: Exceeding API quotas  
-**Solution**: Configure multiple providers or adjust iteration limits
+Available tools:
+- `str_replace_editor` - Code editing
+- `bash` - Shell commands
+- `file_viewer` - File reading
+- `python_executor` - Python code execution
+- `node_executor` - Node.js execution
+- `git_tool` - Git operations
+
+### Deployment Types
 
 ```yaml
-- uses: your-org/swe-agent-resolver@main
-  with:
-    max_iterations: 3  # Reduced from default 5
-    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}  # Fallback
+with:
+  deployment_type: 'local'    # Default: local execution
+  # deployment_type: 'modal'  # Future: Modal serverless
+  # deployment_type: 'docker' # Future: Docker containers
 ```
 
 ### Debug Mode
 
-Enable detailed logging:
+```yaml
+with:
+  debug_mode: 'true'  # Enable detailed logging
+```
+
+## 🔐 Security
+
+### Repository Secrets Management
+
+| Secret Name | Provider | Required | Example |
+|-------------|----------|----------|---------|
+| `OPENAI_API_KEY` | OpenAI | For OpenAI models | `sk-...` |
+| `ANTHROPIC_API_KEY` | Anthropic | For Claude models | `sk-ant-...` |
+| `DEEPSEEK_API_KEY` | DeepSeek | For DeepSeek models | `sk-...` |
+| `OPENROUTER_API_KEY` | OpenRouter | For OpenRouter models | `sk-or-...` |
+| `GROQ_API_KEY` | Groq | For Groq models | `gsk_...` |
+| `AZURE_OPENAI_API_KEY` | Azure | For Azure OpenAI | `...` |
+
+### Repository Variables (Optional)
+
+| Variable Name | Description | Example |
+|---------------|-------------|---------|
+| `AZURE_OPENAI_ENDPOINT` | Azure OpenAI endpoint | `https://your-resource.openai.azure.com/` |
+| `AZURE_OPENAI_API_VERSION` | Azure API version | `2024-02-15-preview` |
+| `CUSTOM_LLM_BASE_URL` | Custom LLM endpoint | `http://localhost:8080/v1` |
+
+### Best Practices
+
+1. **Use organization-level secrets** for shared API keys
+2. **Set spending limits** on provider accounts
+3. **Monitor costs** regularly through provider dashboards
+4. **Use least-privilege** GitHub tokens
+5. **Rotate API keys** periodically
+
+## 📈 Monitoring & Analytics
+
+### Action Outputs
 
 ```yaml
-- uses: your-org/swe-agent-resolver@main
-  with:
-    debug: true
-  env:
-    ACTIONS_STEP_DEBUG: true
+- name: SWE-Agent Resolver
+  id: swe-agent
+  uses: nimishchaudhari/swe-agent-resolver@v1
+  # ... configuration
+
+- name: Report Results
+  run: |
+    echo "Status: ${{ steps.swe-agent.outputs.execution_status }}"
+    echo "Provider: ${{ steps.swe-agent.outputs.provider_used }}"
+    echo "Cost: ${{ steps.swe-agent.outputs.cost_estimate }}"
+    echo "Patch Applied: ${{ steps.swe-agent.outputs.patch_applied }}"
 ```
 
-### Workflow Validation
+### Cost Tracking
 
-Check workflow status:
+```yaml
+- name: Cost Tracking
+  if: always()
+  run: |
+    echo "Daily cost: ${{ steps.swe-agent.outputs.cost_estimate }}"
+    # Add to your cost tracking system
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
+
+### Development Setup
 
 ```bash
-# Validate workflow files
-./test/validate-full-setup.sh
-
-# Check Docker setup
-./test/validate-docker-setup.sh
-
-# Generate status report
-./test/final-status-report.sh
+git clone https://github.com/nimishchaudhari/swe-agent-resolver
+cd swe-agent-resolver
+npm install
+npm run dev
 ```
 
-## 📊 Monitoring
+## 📄 License
 
-### Success Metrics
-- Issue resolution rate
-- Average processing time
-- AI iteration efficiency
-- Error recovery effectiveness
+MIT License - see [LICENSE](LICENSE) file for details.
 
-### Logs and Outputs
-- Detailed progress logs in action output
-- AI analysis summaries
-- Code change proposals
-- Error diagnostics and recovery steps
+## 🆘 Support
 
-## 🔄 CI/CD Integration
+- **Documentation**: [GitHub Wiki](https://github.com/nimishchaudhari/swe-agent-resolver/wiki)
+- **Issues**: [GitHub Issues](https://github.com/nimishchaudhari/swe-agent-resolver/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/nimishchaudhari/swe-agent-resolver/discussions)
+- **Discord**: [Join our community](https://discord.gg/swe-agent-resolver)
 
-### Automated Docker Builds
-- Triggers on changes to `src/**` and `scripts/**`
-- Branch-specific image tagging
-- Automatic fallback to latest stable image
+## 🗺️ Roadmap
 
-### Workflow Testing
-- Pre-commit validation
-- Integration testing
-- Performance benchmarking
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🤝 Support
-
-- **Documentation**: Check this README and inline code comments
-- **Issues**: Open a GitHub issue for bugs or feature requests
-- **Discussions**: Use GitHub Discussions for questions and ideas
-- **Contributing**: See development section above
-
-## 🏷️ Version History
-
-- **v2.0.0**: Modular architecture rewrite with enhanced reliability
-- **v1.5.0**: Added multi-AI provider support and branch-aware Docker images
-- **v1.0.0**: Initial stable release with core functionality
+- [x] Multi-provider LiteLLM integration
+- [x] Cost management and optimization
+- [x] Smart fallback system
+- [ ] Web dashboard for analytics
+- [ ] Custom workflow templates
+- [ ] Integration with more AI providers
+- [ ] Enterprise SSO support
+- [ ] Advanced code analysis tools
 
 ---
 
-Built with ❤️ for the developer community. Making software engineering more efficient, one issue at a time.
+**Ready to supercharge your repository with AI?** 
+
+Add the action and start commenting `@swe-agent` on your issues! 🚀

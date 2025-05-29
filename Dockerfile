@@ -1,58 +1,76 @@
-# Single-stage build for container environment with robust pip handling
-FROM ubuntu:24.04
+# Multi-stage build for SWE-Agent GitHub Action with LiteLLM
+FROM python:3.11-slim AS python-base
 
-# Prevent interactive prompts during package installation
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install all required dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3=3.12* \
-    python3-dev \
-    python3-pip \
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
     git \
-    jq \
+    curl \
+    wget \
     build-essential \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    && rm -rf /var/lib/apt/lists/*
 
-# Verify system pip works without upgrading to avoid conflicts
-RUN python3 -c "import pip; print('System pip OK')"
+# Install SWE-Agent and LiteLLM
+RUN pip install --no-cache-dir \
+    swe-agent \
+    litellm \
+    openai \
+    anthropic \
+    pyyaml \
+    requests \
+    jinja2
 
-# Clone SWE-agent repository
-RUN git clone --depth 1 https://github.com/SWE-agent/SWE-agent.git /app/swe-agent
+# Create SWE-Agent workspace
+RUN mkdir -p /swe-agent-workspace && chmod 755 /swe-agent-workspace
 
-# Set working directory for SWE-agent installation
-WORKDIR /app/swe-agent
+# Stage 2: Node.js runtime with Python
+FROM node:18-slim
 
-# Install SWE-agent dependencies using system environment with --break-system-packages
-RUN if [ -f "requirements.txt" ]; then \
-        python3 -m pip install --no-cache-dir -r requirements.txt --break-system-packages; \
-    fi
+# Install system dependencies including Python
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    python3 \
+    python3-pip \
+    python3-venv \
+    build-essential \
+    docker.io \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install SWE-agent in editable mode with --break-system-packages
-RUN python3 -m pip install --no-cache-dir --editable . --break-system-packages
+# Copy Python dependencies from previous stage
+COPY --from=python-base /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=python-base /usr/local/bin /usr/local/bin
 
-# Set main working directory
-WORKDIR /app
+# Create action directory
+WORKDIR /action
 
-# Copy application files (these change frequently, so put them last)
-COPY entrypoint.sh /entrypoint.sh
-COPY src/ /src/
+# Copy package files and install Node.js dependencies
+COPY package*.json ./
+RUN npm ci --only=production
 
-# Set permissions in a single layer
-RUN chmod +x /entrypoint.sh /src/*.sh
+# Copy action source code
+COPY src/ ./src/
+COPY action/ ./action/
 
-# Display versions for verification (moved to end to avoid rebuilding)
-RUN echo "=== System Information ===" \
-    && echo "Git version: $(git --version)" \
-    && echo "Python version: $(python3 --version)" \
-    && echo "SWE-agent version: $(python3 -c 'import sweagent; print(getattr(sweagent, "__version__", "unknown"))' 2>/dev/null || echo 'installed')" \
-    && echo "Ubuntu version: $(cat /etc/os-release | grep PRETTY_NAME)" \
-    && echo "✅ Container environment setup complete"
+# Create workspace and cache directories
+RUN mkdir -p /swe-agent-workspace && \
+    mkdir -p /tmp/swe-agent-cache && \
+    mkdir -p /github/workspace && \
+    chmod 755 /swe-agent-workspace /tmp/swe-agent-cache /github/workspace
 
-# Health check to ensure the environment is working
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python3 -c "import sys; print('Python OK')" && which git > /dev/null
+# Create non-root user for execution
+RUN useradd -m -u 1001 sweagent && \
+    chown -R sweagent:sweagent /action /swe-agent-workspace /tmp/swe-agent-cache
 
-# Set entrypoint
-ENTRYPOINT ["/entrypoint.sh"]
+# Set Python path for SWE-Agent
+ENV PYTHONPATH="/usr/local/lib/python3.11/site-packages:$PYTHONPATH"
+ENV PATH="/usr/local/bin:$PATH"
+
+# GitHub Actions environment
+ENV GITHUB_ACTIONS=true
+ENV CI=true
+
+# Switch to non-root user for security
+USER sweagent
+
+# Entry point for GitHub Action
+ENTRYPOINT ["node", "/action/action/entrypoint.js"]

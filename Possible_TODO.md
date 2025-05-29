@@ -1,1 +1,0 @@
-I think the config.yml file can be improved by adding more options for the user to customize the behavior of the script. To be checked later.e
