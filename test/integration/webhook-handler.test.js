@@ -4,7 +4,6 @@ const SWEAgentAction = require('../../action/entrypoint');
 const fixtures = require('../fixtures/github-api-responses');
 
 describe('Webhook Handler Integration', () => {
-  let action;
   let restoreEnv;
 
   beforeEach(async () => {
@@ -16,8 +15,6 @@ describe('Webhook Handler Integration', () => {
       INPUT_MAX_COST: '5.00',
       INPUT_DEBUG_MODE: 'false'
     });
-
-    action = new SWEAgentAction();
     
     // Mock GitHub API base
     nock('https://api.github.com')
@@ -53,6 +50,9 @@ describe('Webhook Handler Integration', () => {
         .patch('/repos/test-owner/test-repo/issues/comments/99999')
         .reply(200, { id: 99999 });
 
+      // Create action after setting environment
+      const action = new SWEAgentAction();
+
       // Run action
       await action.run();
 
@@ -79,6 +79,9 @@ describe('Webhook Handler Integration', () => {
         .post('/repos/test-owner/test-repo/issues/123/comments')
         .reply(201);
 
+      // Create action after setting environment
+      const action = new SWEAgentAction();
+
       await action.run();
 
       // Verify no API calls were made
@@ -103,6 +106,9 @@ describe('Webhook Handler Integration', () => {
         .post('/repos/test-owner/test-repo/issues/123/comments')
         .reply(201, { id: 88888 });
 
+      // Create action after setting environment
+      const action = new SWEAgentAction();
+
       await action.run();
 
       expect(commentMock.isDone()).toBe(true);
@@ -124,6 +130,9 @@ describe('Webhook Handler Integration', () => {
           html_url: 'https://github.com/test-owner/test-repo/pull/999#issuecomment-77777'
         });
 
+      // Create action after setting environment
+      const action = new SWEAgentAction();
+
       await action.run();
 
       expect(commentMock.isDone()).toBe(true);
@@ -142,6 +151,9 @@ describe('Webhook Handler Integration', () => {
           id: 66666,
           html_url: 'https://github.com/test-owner/test-repo/pull/456#issuecomment-66666'
         });
+
+      // Create action after setting environment
+      const action = new SWEAgentAction();
 
       await action.run();
 
@@ -164,6 +176,9 @@ describe('Webhook Handler Integration', () => {
           body => body.body.includes('Missing API key'))
         .reply(201, { id: 55555 });
 
+      // Create action after setting environment
+      const action = new SWEAgentAction();
+
       await action.run();
 
       expect(errorMock.isDone()).toBe(true);
@@ -179,6 +194,9 @@ describe('Webhook Handler Integration', () => {
       nock('https://api.github.com')
         .post('/repos/test-owner/test-repo/issues/123/comments')
         .reply(403, fixtures.errors.rateLimit);
+
+      // Create action after setting environment
+      const action = new SWEAgentAction();
 
       await action.run();
 
@@ -202,6 +220,9 @@ describe('Webhook Handler Integration', () => {
           body => body.body.includes('ANTHROPIC'))
         .reply(201, { id: 44444 });
 
+      // Create action after setting environment
+      const action = new SWEAgentAction();
+
       await action.run();
 
       expect(commentMock.isDone()).toBe(true);
@@ -220,6 +241,9 @@ describe('Webhook Handler Integration', () => {
         .post('/repos/test-owner/test-repo/issues/123/comments',
           body => body.body.includes('DEEPSEEK'))
         .reply(201, { id: 33333 });
+
+      // Create action after setting environment
+      const action = new SWEAgentAction();
 
       await action.run();
 
@@ -247,6 +271,9 @@ describe('Webhook Handler Integration', () => {
           body => body.body.includes('Est. Cost: $'))
         .reply(200, { id: 22222 });
 
+      // Create action after setting environment
+      const action = new SWEAgentAction();
+
       await action.run();
 
       expect(commentMock.isDone()).toBe(true);
@@ -265,6 +292,9 @@ describe('Webhook Handler Integration', () => {
       const commentMock = nock('https://api.github.com')
         .post('/repos/test-owner/test-repo/issues/123/comments')
         .reply(201, { id: 11111 });
+
+      // Create action after setting environment
+      const action = new SWEAgentAction();
 
       await action.run();
 

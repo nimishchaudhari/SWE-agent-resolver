@@ -68,9 +68,8 @@ jobs:
           model_name: 'gpt-4o'
           trigger_phrase: '@swe-agent'
           max_cost: '5.00'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
 ```
 
 ### 2. Configure Your Secrets
@@ -149,8 +148,8 @@ Comment on any issue or PR:
 3. **Models**: `gpt-4o`, `gpt-4`, `gpt-3.5-turbo`
 
 ```yaml
-env:
-  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+with:
+  openai_api_key: ${{ secrets.OPENAI_API_KEY }}
 ```
 
 **Cost**: $1.50-$15.00 per 1M tokens
@@ -164,8 +163,7 @@ env:
 ```yaml
 with:
   model_name: 'claude-3-5-sonnet-latest'
-env:
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
 **Cost**: $3.00-$15.00 per 1M tokens
@@ -180,8 +178,7 @@ env:
 with:
   model_name: 'deepseek/deepseek-chat'
   max_cost: '2.00'  # Lower cost needed
-env:
-  DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+  deepseek_api_key: ${{ secrets.DEEPSEEK_API_KEY }}
 ```
 
 **Cost**: $0.14-$0.28 per 1M tokens ⭐ **Best value**
@@ -195,8 +192,7 @@ env:
 ```yaml
 with:
   model_name: 'openrouter/anthropic/claude-3.5-sonnet'
-env:
-  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+  openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
 ```
 
 **Cost**: Varies by model ($0.50-$10.00 per 1M tokens)
@@ -213,10 +209,9 @@ env:
 ```yaml
 with:
   model_name: 'azure/gpt-4'  # Must match deployment name
-env:
-  AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-  AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
-  AZURE_OPENAI_API_VERSION: ${{ vars.AZURE_OPENAI_API_VERSION }}
+  azure_openai_api_key: ${{ secrets.AZURE_OPENAI_API_KEY }}
+  azure_openai_endpoint: ${{ vars.AZURE_OPENAI_ENDPOINT }}
+  azure_openai_api_version: ${{ vars.AZURE_OPENAI_API_VERSION }}
 ```
 
 ### Groq Setup (Fastest)
@@ -228,8 +223,7 @@ env:
 ```yaml
 with:
   model_name: 'groq/llama2-70b-4096'
-env:
-  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+  groq_api_key: ${{ secrets.GROQ_API_KEY }}
 ```
 
 **Cost**: $0.27 per 1M tokens ⚡ **Fastest inference**
@@ -277,13 +271,12 @@ jobs:
           model_name: 'claude-3-5-sonnet-latest'     # Primary (best quality)
           fallback_models: 'gpt-4o,deepseek/deepseek-chat,groq/llama2-70b-4096'
           max_cost: '6.00'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           # Multiple providers for redundancy
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          deepseek_api_key: ${{ secrets.DEEPSEEK_API_KEY }}
+          groq_api_key: ${{ secrets.GROQ_API_KEY }}
 ```
 
 **Fallback Strategy**:
