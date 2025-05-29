@@ -238,7 +238,7 @@ describe('SWEAgentConfigGenerator', () => {
   describe('validateConfig', () => {
     test('should validate correct configuration', () => {
       const config = configGenerator.generateConfig({
-        model: { name: 'gpt-4o', api_key: '$KEY' },
+        model: { model: 'gpt-4o', api_key: '$KEY' },
         problem: 'issue_analysis',
         context: { type: 'issue', repoOwner: 'owner', repoName: 'repo' }
       });

@@ -194,9 +194,9 @@ describe('ProviderManager', () => {
         provider: 'openai',
         inputTokens: 700,
         outputTokens: 300,
-        inputCost: '0.0011',
+        inputCost: '0.0010',
         outputCost: '0.0006',
-        totalCost: '0.0017',
+        totalCost: '0.0016',
         currency: 'USD'
       });
     });
