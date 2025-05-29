@@ -38,3 +38,4 @@ jobs:
           claude_expires_at: ${{ secrets.CLAUDE_EXPIRES_AT }}
           allowed_tools: 'bash'
           timeout_minutes: "60"
+          assignee_trigger: '@claude'
