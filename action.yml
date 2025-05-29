@@ -1,167 +1,41 @@
-name: 'SWE-Agent Issue Resolver'
-description: 'Automatically resolves GitHub issues using SWE-Agent with AI assistance'
-author: 'nimishchaudhari'
+name: 'SWE-Agent GitHub Action'
+description: 'Automated software engineering agent for GitHub repositories'
+author: 'Your Organization'
 
 inputs:
-  github_token:
-    description: 'GitHub token for repository access and comment posting'
+  github-token:
+    description: 'GitHub token for API access'
     required: true
-    default: ${{ github.token }}
-  trigger_phrase:
-    description: 'Comment phrase that triggers the agent (e.g., "@swe-agent fix this")'
+  webhook-secret:
+    description: 'Secret for validating GitHub webhooks'
+    required: true
+  swe-agent-timeout:
+    description: 'Timeout for SWE-Agent operations in milliseconds'
     required: false
-    default: '@swe-agent'
-  llm_api_key:
-    description: 'API key for the LLM (OpenAI, Anthropic, etc.). Store as repository secret.'
+    default: '300000'
+  max-concurrent-jobs:
+    description: 'Maximum number of concurrent SWE-Agent jobs'
     required: false
-  openai_api_key:
-    description: 'OpenAI API key. Store as repository secret.'
+    default: '3'
+  log-level:
+    description: 'Logging level (error, warn, info, debug)'
     required: false
-  anthropic_api_key:
-    description: 'Anthropic API key. Store as repository secret.'
-    required: false
-  deepseek_api_key:
-    description: 'DeepSeek API key. Store as repository secret.'
-    required: false
-  openrouter_api_key:
-    description: 'OpenRouter API key. Store as repository secret.'
-    required: false
-  gemini_api_key:
-    description: 'Google Gemini API key. Store as repository secret.'
-    required: false
-  model_name:
-    description: 'AI model to use (e.g., gpt-4o, claude-3.5-sonnet, gpt-4-turbo)'
-    required: false
-    default: 'gpt-4o'
-  timeout_minutes:
-    description: 'Maximum time in minutes to run SWE-agent (default: 30)'
-    required: false
-    default: '30'
-  wait_for_build:
-    description: 'Whether to wait for any running build-and-push workflows to complete'
-    required: false
-    default: 'true'
-  response_mode:
-    description: 'Response mode: "auto" (detect intent), "patch" (force patch generation), "analysis" (analysis only), "opinion" (opinion/advice only)'
-    required: false
-    default: 'auto'
-  enable_visual_content:
-    description: 'Whether to enable generation of visual content (charts, plots, diagrams)'
-    required: false
-    default: 'true'
-  visual_content_format:
-    description: 'Preferred format for visual content: "mermaid", "ascii", "code", "all"'
-    required: false
-    default: 'all'
-  max_comment_length:
-    description: 'Maximum length for response comments (default: 65536)'
-    required: false
-    default: '65536'
-  # Multi-Context Support Parameters
-  context_mode:
-    description: 'Context handling mode: "auto" (detect), "pr" (force PR), "issue" (force issue), "review" (PR review)'
-    required: false
-    default: 'auto'
-  pr_strategy:
-    description: 'PR handling strategy: "continue" (update existing), "new" (create new)'
-    required: false
-    default: 'continue'
-  git_reference_mode:
-    description: 'Git reference mode: "auto" (context-based), "head" (latest), "base" (base branch), "pr_head" (PR head)'
-    required: false
-    default: 'auto'
-  enable_review_context:
-    description: 'Enable special handling for PR review comments'
-    required: false
-    default: 'true'
-  target_branch_strategy:
-    description: 'Target branch strategy: "auto" (context-based), "default" (main/master), "current" (current branch)'
-    required: false
-    default: 'auto'
+    default: 'info'
 
 outputs:
-  patch_generated:
-    description: 'Whether a patch was generated'
-  patch_content:
-    description: 'The generated patch content'
-  execution_time:
-    description: 'Time taken for execution'
+  server-url:
+    description: 'URL of the running webhook server'
+    value: 'http://localhost:3000'
 
 runs:
-  using: 'composite'
-  steps:
-    - name: Wait for build-and-push to complete
-      if: inputs.wait_for_build == 'true'
-      shell: bash
-      env:
-        GITHUB_TOKEN: ${{ inputs.github_token }}
-      run: |
-        echo "🔍 Checking for running build-and-push workflows..."
-        
-        # Function to check for running workflows
-        check_running_builds() {
-          local running_workflows=$(gh api \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "/repos/${{ github.repository }}/actions/runs" \
-            --jq '.workflow_runs[] | select(.status == "in_progress" and (.name == "Build and Cache Docker Image" or .workflow_id == "build-docker-image.yml")) | .id')
-          
-          echo "$running_workflows"
-        }
-        
-        # Wait for any running build workflows to complete
-        max_wait_time=1800  # 30 minutes max wait
-        wait_interval=30    # Check every 30 seconds
-        elapsed_time=0
-        
-        while [ $elapsed_time -lt $max_wait_time ]; do
-          running_builds=$(check_running_builds)
-          
-          if [ -z "$running_builds" ]; then
-            echo "✅ No build-and-push workflows are currently running."
-            break
-          fi
-          
-          echo "⏳ Found running build workflows: $running_builds"
-          echo "   Waiting ${wait_interval} seconds before checking again..."
-          echo "   Elapsed time: ${elapsed_time}/${max_wait_time} seconds"
-          
-          sleep $wait_interval
-          elapsed_time=$((elapsed_time + wait_interval))
-        done
-        
-        if [ $elapsed_time -ge $max_wait_time ]; then
-          echo "⚠️ Timeout reached while waiting for build workflows. Proceeding anyway..."
-        else
-          echo "✅ All build workflows completed. Proceeding with latest image."
-          # Give a small buffer for image registry propagation
-          sleep 10
-        fi
-
-    - name: Run SWE-Agent
-      uses: docker://ghcr.io/nimishchaudhari/swe-agent-resolver:latest
-      env:
-        INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
-        INPUT_TRIGGER_PHRASE: ${{ inputs.trigger_phrase }}
-        INPUT_LLM_API_KEY: ${{ inputs.llm_api_key }}
-        INPUT_OPENAI_API_KEY: ${{ inputs.openai_api_key }}
-        INPUT_ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
-        INPUT_DEEPSEEK_API_KEY: ${{ inputs.deepseek_api_key }}
-        INPUT_OPENROUTER_API_KEY: ${{ inputs.openrouter_api_key }}
-        INPUT_GEMINI_API_KEY: ${{ inputs.gemini_api_key }}
-        INPUT_MODEL_NAME: ${{ inputs.model_name }}
-        INPUT_TIMEOUT_MINUTES: ${{ inputs.timeout_minutes }}
-        # New environment variables for enhanced modes
-        INPUT_RESPONSE_MODE: ${{ inputs.response_mode }}
-        INPUT_ENABLE_VISUAL_CONTENT: ${{ inputs.enable_visual_content }}
-        INPUT_VISUAL_CONTENT_FORMAT: ${{ inputs.visual_content_format }}
-        INPUT_MAX_COMMENT_LENGTH: ${{ inputs.max_comment_length }}
-        # Multi-Context Support Environment Variables
-        INPUT_CONTEXT_MODE: ${{ inputs.context_mode }}
-        INPUT_PR_STRATEGY: ${{ inputs.pr_strategy }}
-        INPUT_GIT_REFERENCE_MODE: ${{ inputs.git_reference_mode }}
-        INPUT_ENABLE_REVIEW_CONTEXT: ${{ inputs.enable_review_context }}
-        INPUT_TARGET_BRANCH_STRATEGY: ${{ inputs.target_branch_strategy }}
+  using: 'docker'
+  image: 'Dockerfile'
+  env:
+    GITHUB_TOKEN: ${{ inputs.github-token }}
+    GITHUB_WEBHOOK_SECRET: ${{ inputs.webhook-secret }}
+    SWE_AGENT_TIMEOUT: ${{ inputs.swe-agent-timeout }}
+    MAX_CONCURRENT_JOBS: ${{ inputs.max-concurrent-jobs }}
+    LOG_LEVEL: ${{ inputs.log-level }}
 
 branding:
   icon: 'cpu'

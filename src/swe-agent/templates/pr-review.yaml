@@ -1,0 +1,87 @@
+version: '1.0'
+agent:
+  name: 'swe-agent'
+  version: '0.4.0'
+  model: 'claude-3-sonnet'
+  temperature: 0.0
+
+task:
+  type: 'pr_review'
+  description: 'Review pull request and provide comprehensive feedback'
+  
+commands:
+  - name: 'read_pr_description'
+    description: 'Read and understand the PR description and goals'
+    
+  - name: 'analyze_changes'
+    description: 'Analyze all code changes in the PR'
+    
+  - name: 'check_code_quality'
+    description: 'Check code quality, style, and best practices'
+    
+  - name: 'identify_issues'
+    description: 'Identify potential bugs, security issues, and improvements'
+    
+  - name: 'suggest_tests'
+    description: 'Suggest additional tests if needed'
+    
+  - name: 'create_review'
+    description: 'Create comprehensive review report'
+
+prompts:
+  system: |
+    You are an expert code reviewer analyzing a pull request. Your goal is to:
+    1. Understand the PR goals and changes
+    2. Analyze code quality and adherence to best practices
+    3. Identify potential bugs, security issues, and performance problems
+    4. Suggest improvements and optimizations
+    5. Recommend additional tests
+    6. Provide constructive feedback
+    
+    Be thorough, constructive, and focus on code quality and maintainability.
+    
+  task: |
+    Review the pull request and provide comprehensive feedback including:
+    - Overall assessment of the changes
+    - Code quality analysis
+    - Potential issues and bugs
+    - Security considerations
+    - Performance implications
+    - Test coverage recommendations
+    - Suggested improvements
+
+tools:
+  - file_reader
+  - file_writer
+  - grep
+  - find
+  - bash
+  - git
+  - diff
+
+environment:
+  working_dir: '/tmp/swe-agent-workspace'
+  max_iterations: 40
+  timeout: 900000  # 15 minutes
+
+output:
+  format: 'json'
+  file: 'review.json'
+  structure:
+    overall_assessment: 'Overall assessment of the PR'
+    changes_summary: 'Summary of changes made'
+    code_quality:
+      rating: 'Code quality rating (1-10)'
+      issues: 'List of code quality issues'
+      suggestions: 'List of improvements'
+    potential_issues:
+      bugs: 'List of potential bugs'
+      security: 'List of security concerns'
+      performance: 'List of performance issues'
+    test_recommendations:
+      coverage: 'Assessment of test coverage'
+      missing_tests: 'List of missing test cases'
+      suggestions: 'Test improvement suggestions'
+    approval_status: 'approve/request_changes/comment'
+    blocking_issues: 'List of issues that must be fixed'
+    suggestions: 'List of optional improvements'

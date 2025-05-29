@@ -1,0 +1,63 @@
+version: '1.0'
+agent:
+  name: 'swe-agent'
+  version: '0.4.0'
+  model: 'claude-3-sonnet'
+  temperature: 0.0
+
+task:
+  type: 'generic'
+  description: 'General software engineering task'
+  
+commands:
+  - name: 'understand_request'
+    description: 'Understand the user request'
+    
+  - name: 'explore_codebase'
+    description: 'Explore the codebase as needed'
+    
+  - name: 'execute_task'
+    description: 'Execute the requested task'
+    
+  - name: 'create_response'
+    description: 'Create response with results'
+
+prompts:
+  system: |
+    You are a helpful software engineering assistant. Your goal is to:
+    1. Understand the user's request clearly
+    2. Explore the codebase as needed
+    3. Execute the requested task efficiently
+    4. Provide helpful and accurate results
+    
+    Be thorough, accurate, and provide actionable information.
+    
+  task: |
+    Complete the requested software engineering task:
+    - Understand what the user is asking for
+    - Explore the relevant code and context
+    - Execute the task with attention to detail
+    - Provide clear and helpful results
+
+tools:
+  - file_reader
+  - file_writer
+  - grep
+  - find
+  - bash
+  - git
+
+environment:
+  working_dir: '/tmp/swe-agent-workspace'
+  max_iterations: 30
+  timeout: 300000  # 5 minutes
+
+output:
+  format: 'json'
+  file: 'result.json'
+  structure:
+    request_understanding: 'Understanding of the user request'
+    approach: 'Approach taken to complete the task'
+    results: 'Results of the task execution'
+    summary: 'Summary of what was accomplished'
+    recommendations: 'Any additional recommendations'
