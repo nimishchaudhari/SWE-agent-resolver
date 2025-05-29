@@ -1,5 +1,6 @@
 const githubClient = require('./client');
 const sweOrchestrator = require('../swe-agent/orchestrator');
+const PipelineOrchestrator = require('../swe-agent/pipeline-orchestrator');
 const resultProcessor = require('../result-processor');
 const logger = require('../utils/logger');
 const WebhookParser = require('./webhook-parser');
@@ -14,6 +15,14 @@ class EnhancedGitHubHandler {
     this.triggerDetector = new TriggerDetector();
     this.contextExtractor = new ContextExtractor();
     this.permissionValidator = new PermissionValidator();
+    
+    // Initialize comprehensive pipeline orchestrator
+    this.pipelineOrchestrator = new PipelineOrchestrator({
+      orchestrator: {
+        maxConcurrent: config.sweAgent.maxConcurrentJobs,
+        defaultTimeout: config.sweAgent.timeout
+      }
+    });
     
     // Performance metrics
     this.metrics = {
@@ -131,34 +140,36 @@ class EnhancedGitHubHandler {
   async handleIssueEvent(parsedWebhook, repository) {
     const { issue } = parsedWebhook;
     
-    logger.info(`Processing issue event`, {
+    logger.info(`Processing issue event with comprehensive pipeline`, {
       repository: repository.fullName,
       issue: issue.number,
       action: parsedWebhook.action
     });
     
     try {
-      await this.updateStatus(repository, 'issue', issue.number, 'pending', 'SWE-Agent is analyzing the issue...');
-      
-      const context = await this.contextExtractor.extractProblemContext(parsedWebhook, null);
-      
-      const result = await sweOrchestrator.processIssue({
+      // Use comprehensive pipeline orchestrator for complete workflow
+      const result = await this.pipelineOrchestrator.executePipeline({
+        type: 'issue',
         repository: repository.fullName,
         issueNumber: issue.number,
         issueTitle: issue.title,
         issueBody: issue.body,
         repoUrl: repository.cloneUrl,
-        context
+        parsedWebhook,
+        githubContext: {
+          repository: repository.fullName,
+          server_url: 'https://github.com',
+          sha: parsedWebhook.sha,
+          actor: parsedWebhook.sender?.login,
+          ref: 'refs/heads/main'
+        }
       });
-      
-      const formattedResult = resultProcessor.formatIssueResult(result);
-      await githubClient.commentOnIssue(repository, issue.number, formattedResult);
-      await this.updateStatus(repository, 'issue', issue.number, 'success', 'SWE-Agent analysis completed');
       
       return { success: true, type: 'issue_analysis', result };
       
     } catch (error) {
-      await this.handleProcessingError(error, parsedWebhook, repository, 'issue');
+      // Pipeline orchestrator handles comprehensive error reporting
+      logger.error('Issue pipeline failed:', error);
       throw error;
     }
   }
@@ -166,18 +177,16 @@ class EnhancedGitHubHandler {
   async handlePullRequestEvent(parsedWebhook, repository) {
     const { pullRequest } = parsedWebhook;
     
-    logger.info(`Processing PR event`, {
+    logger.info(`Processing PR event with comprehensive pipeline`, {
       repository: repository.fullName,
       pr: pullRequest.number,
       action: parsedWebhook.action
     });
     
     try {
-      await githubClient.updatePRStatus(repository, pullRequest.head.sha, 'pending', 'SWE-Agent is reviewing the PR...');
-      
-      const context = await this.contextExtractor.extractProblemContext(parsedWebhook, null);
-      
-      const result = await sweOrchestrator.processPullRequest({
+      // Use comprehensive pipeline orchestrator for complete workflow
+      const result = await this.pipelineOrchestrator.executePipeline({
+        type: 'pr',
         repository: repository.fullName,
         prNumber: pullRequest.number,
         prTitle: pullRequest.title,
@@ -185,17 +194,21 @@ class EnhancedGitHubHandler {
         headSha: pullRequest.head.sha,
         baseSha: pullRequest.base.sha,
         repoUrl: repository.cloneUrl,
-        context
+        parsedWebhook,
+        githubContext: {
+          repository: repository.fullName,
+          server_url: 'https://github.com',
+          sha: pullRequest.head.sha,
+          actor: parsedWebhook.sender?.login,
+          ref: pullRequest.head.ref
+        }
       });
-      
-      const formattedResult = resultProcessor.formatPRResult(result);
-      await githubClient.commentOnPR(repository, pullRequest.number, formattedResult);
-      await githubClient.updatePRStatus(repository, pullRequest.head.sha, 'success', 'SWE-Agent review completed');
       
       return { success: true, type: 'pr_review', result };
       
     } catch (error) {
-      await this.handleProcessingError(error, parsedWebhook, repository, 'pr');
+      // Pipeline orchestrator handles comprehensive error reporting
+      logger.error('PR pipeline failed:', error);
       throw error;
     }
   }
@@ -214,7 +227,7 @@ class EnhancedGitHubHandler {
       return { processed: false, reason: 'no_trigger' };
     }
     
-    logger.info(`Processing triggered comment`, {
+    logger.info(`Processing triggered comment with comprehensive pipeline`, {
       repository: repository.fullName,
       issue: issue.number,
       comment: comment.id,
@@ -222,24 +235,29 @@ class EnhancedGitHubHandler {
     });
     
     try {
-      const context = await this.contextExtractor.extractProblemContext(parsedWebhook, triggerAnalysis.trigger);
-      
-      const result = await sweOrchestrator.processComment({
+      // Use comprehensive pipeline orchestrator for complete workflow
+      const result = await this.pipelineOrchestrator.executePipeline({
+        type: 'comment',
         repository: repository.fullName,
         issueNumber: issue.number,
         commentBody: comment.body,
         repoUrl: repository.cloneUrl,
         trigger: triggerAnalysis.trigger,
-        context
+        parsedWebhook,
+        githubContext: {
+          repository: repository.fullName,
+          server_url: 'https://github.com',
+          sha: parsedWebhook.sha,
+          actor: parsedWebhook.sender?.login,
+          ref: 'refs/heads/main'
+        }
       });
-      
-      const formattedResult = resultProcessor.formatCommentResult(result);
-      await githubClient.commentOnIssue(repository, issue.number, formattedResult);
       
       return { success: true, type: 'comment_command', result };
       
     } catch (error) {
-      await this.handleProcessingError(error, parsedWebhook, repository, 'comment');
+      // Pipeline orchestrator handles comprehensive error reporting
+      logger.error('Comment pipeline failed:', error);
       throw error;
     }
   }
@@ -258,7 +276,7 @@ class EnhancedGitHubHandler {
       return { processed: false, reason: 'no_trigger' };
     }
     
-    logger.info(`Processing triggered PR comment`, {
+    logger.info(`Processing triggered PR comment with comprehensive pipeline`, {
       repository: repository.fullName,
       pr: pullRequest.number,
       comment: comment.id,
@@ -267,9 +285,9 @@ class EnhancedGitHubHandler {
     });
     
     try {
-      const context = await this.contextExtractor.extractProblemContext(parsedWebhook, triggerAnalysis.trigger);
-      
-      const result = await sweOrchestrator.processPRComment({
+      // Use comprehensive pipeline orchestrator for complete workflow
+      const result = await this.pipelineOrchestrator.executePipeline({
+        type: 'pr_comment',
         repository: repository.fullName,
         prNumber: pullRequest.number,
         commentBody: comment.body,
@@ -277,16 +295,21 @@ class EnhancedGitHubHandler {
         file: comment.path,
         line: comment.line,
         trigger: triggerAnalysis.trigger,
-        context
+        parsedWebhook,
+        githubContext: {
+          repository: repository.fullName,
+          server_url: 'https://github.com',
+          sha: pullRequest.head?.sha,
+          actor: parsedWebhook.sender?.login,
+          ref: pullRequest.head?.ref
+        }
       });
-      
-      const formattedResult = resultProcessor.formatCommentResult(result);
-      await githubClient.commentOnPR(repository, pullRequest.number, formattedResult);
       
       return { success: true, type: 'pr_comment_command', result };
       
     } catch (error) {
-      await this.handleProcessingError(error, parsedWebhook, repository, 'pr_comment');
+      // Pipeline orchestrator handles comprehensive error reporting
+      logger.error('PR comment pipeline failed:', error);
       throw error;
     }
   }
@@ -360,8 +383,18 @@ class EnhancedGitHubHandler {
     return {
       ...this.metrics,
       errorRate: this.metrics.processed > 0 ? (this.metrics.errors / this.metrics.processed) : 0,
-      permissionCache: this.permissionValidator.getCacheStats()
+      permissionCache: this.permissionValidator.getCacheStats(),
+      pipelineStatus: this.pipelineOrchestrator.getStatus()
     };
+  }
+
+  // Pipeline monitoring methods
+  getPipelineStatus(pipelineId) {
+    return this.pipelineOrchestrator.getPipelineStatus(pipelineId);
+  }
+
+  getActivePipelines() {
+    return this.pipelineOrchestrator.getStatus().activePipelines;
   }
 
   // Legacy compatibility methods

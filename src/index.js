@@ -18,6 +18,65 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+app.get('/status', (req, res) => {
+  try {
+    const metrics = githubHandler.getMetrics();
+    res.json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      ...metrics
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+app.get('/pipeline/:pipelineId/status', (req, res) => {
+  try {
+    const { pipelineId } = req.params;
+    const status = githubHandler.getPipelineStatus(pipelineId);
+    
+    if (!status) {
+      return res.status(404).json({
+        error: 'Pipeline not found',
+        pipelineId
+      });
+    }
+    
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({
+      error: error.message,
+      pipelineId: req.params.pipelineId
+    });
+  }
+});
+
+app.get('/metrics', (req, res) => {
+  try {
+    const metrics = githubHandler.getMetrics();
+    res.json({
+      timestamp: new Date().toISOString(),
+      metrics: metrics.pipelineStatus.metrics,
+      activeJobs: metrics.pipelineStatus.activePipelines,
+      system: {
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        version: process.version
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 const server = createServer(app);
 
 server.listen(config.server.port, () => {

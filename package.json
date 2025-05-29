@@ -15,7 +15,16 @@
     "test:webhooks": "jest --testPathPattern=webhooks",
     "test:e2e": "jest --testPathPattern=e2e",
     "lint": "eslint src/",
-    "format": "prettier --write src/"
+    "format": "prettier --write src/",
+    "config:setup": "node scripts/setup-config.js interactive",
+    "config:quick": "node scripts/setup-config.js quick",
+    "config:list": "node scripts/setup-config.js presets",
+    "config:validate": "node scripts/setup-config.js validate",
+    "config:env": "node scripts/setup-config.js env",
+    "config:github": "node scripts/setup-config.js quick github-integration",
+    "config:pr": "node scripts/setup-config.js quick pr-review",
+    "config:local": "node scripts/setup-config.js quick local-development",
+    "config:enterprise": "node scripts/setup-config.js quick enterprise"
   },
   "dependencies": {
     "@octokit/rest": "^20.0.2",
@@ -23,7 +32,8 @@
     "express": "^4.18.2",
     "winston": "^3.11.0",
     "joi": "^17.11.0",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "js-yaml": "^4.1.0"
   },
   "devDependencies": {
     "jest": "^29.7.0",

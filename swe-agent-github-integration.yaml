@@ -1,0 +1,42 @@
+problem_statement:
+  type: issue_analysis
+  description: Analyze and provide insights for GitHub issues
+agent:
+  model:
+    name: claude-3-5-sonnet-20241022
+    api_base: https://api.anthropic.com
+    api_key: $ANTHROPIC_API_KEY
+    temperature: 0
+    max_tokens: 200000
+    timeout: 300
+  parser:
+    name: ToolCallingParser
+    function_calling: true
+  history_processor:
+    name: DefaultHistoryProcessor
+    window_size: 4000
+  tools:
+    - name: str_replace_editor
+    - name: bash
+    - name: file_viewer
+    - name: python_executor
+      condition: python
+    - name: node_executor
+      condition: javascript
+    - name: git_tool
+      condition: always
+env:
+  repo:
+    base_commit: HEAD
+  workspace:
+    mount_path: /tmp/swe-agent-workspace
+    persistent: false
+    cleanup: true
+  environment_variables:
+    LOG_LEVEL: INFO
+    PYTHONPATH: $PYTHONPATH
+metadata:
+  generated_by: swe-agent-resolver
+  generated_at: "2025-05-29T14:29:14.844Z"
+  preset_used: claude-3-5-sonnet
+  llm_provider: anthropic
