@@ -36,6 +36,7 @@ jobs:
           claude_access_token: ${{ secrets.CLAUDE_ACCESS_TOKEN }}
           claude_refresh_token: ${{ secrets.CLAUDE_REFRESH_TOKEN }}
           claude_expires_at: ${{ secrets.CLAUDE_EXPIRES_AT }}
-          allowed_tools: 'bash'
+          allowed_tools: "Bash(*)"
+          custom_instructions: "You have also been granted tools for editing files and running bun commands (install, run, test, typecheck) for testing your changes: bun install, bun test, bun run format, bun typecheck."
           timeout_minutes: "60"
           assignee_trigger: '@claude'
