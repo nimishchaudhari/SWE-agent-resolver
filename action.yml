@@ -51,6 +51,70 @@ inputs:
     description: 'Enable debug logging and detailed output'
     required: false
     default: 'false'
+  
+  github_token:
+    description: 'GitHub token for API access'
+    required: true
+  
+  openai_api_key:
+    description: 'OpenAI API key (required for OpenAI models)'
+    required: false
+  
+  anthropic_api_key:
+    description: 'Anthropic API key (required for Claude models)'
+    required: false
+  
+  azure_openai_api_key:
+    description: 'Azure OpenAI API key'
+    required: false
+  
+  azure_openai_endpoint:
+    description: 'Azure OpenAI endpoint URL'
+    required: false
+  
+  azure_openai_api_version:
+    description: 'Azure OpenAI API version'
+    required: false
+  
+  openrouter_api_key:
+    description: 'OpenRouter API key'
+    required: false
+  
+  deepseek_api_key:
+    description: 'DeepSeek API key'
+    required: false
+  
+  groq_api_key:
+    description: 'Groq API key'
+    required: false
+  
+  together_api_key:
+    description: 'Together AI API key'
+    required: false
+  
+  mistral_api_key:
+    description: 'Mistral API key'
+    required: false
+  
+  cohere_api_key:
+    description: 'Cohere API key'
+    required: false
+  
+  perplexity_api_key:
+    description: 'Perplexity API key'
+    required: false
+  
+  anyscale_api_key:
+    description: 'Anyscale API key'
+    required: false
+  
+  custom_llm_base_url:
+    description: 'Custom LLM base URL'
+    required: false
+  
+  custom_llm_api_key:
+    description: 'Custom LLM API key'
+    required: false
 
 outputs:
   execution_status:
@@ -72,32 +136,24 @@ runs:
   using: 'docker'
   image: 'Dockerfile'
   env:
-    GITHUB_TOKEN: ${{ github.token }}
+    GITHUB_TOKEN: ${{ inputs.github_token }}
     # Provider-specific API keys (auto-detected based on model_name)
-    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-    AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-    AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
-    AZURE_OPENAI_API_VERSION: ${{ vars.AZURE_OPENAI_API_VERSION }}
-    OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-    DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-    GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-    TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
-    MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
-    COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
-    PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
-    ANYSCALE_API_KEY: ${{ secrets.ANYSCALE_API_KEY }}
+    OPENAI_API_KEY: ${{ inputs.openai_api_key }}
+    ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+    AZURE_OPENAI_API_KEY: ${{ inputs.azure_openai_api_key }}
+    AZURE_OPENAI_ENDPOINT: ${{ inputs.azure_openai_endpoint }}
+    AZURE_OPENAI_API_VERSION: ${{ inputs.azure_openai_api_version }}
+    OPENROUTER_API_KEY: ${{ inputs.openrouter_api_key }}
+    DEEPSEEK_API_KEY: ${{ inputs.deepseek_api_key }}
+    GROQ_API_KEY: ${{ inputs.groq_api_key }}
+    TOGETHER_API_KEY: ${{ inputs.together_api_key }}
+    MISTRAL_API_KEY: ${{ inputs.mistral_api_key }}
+    COHERE_API_KEY: ${{ inputs.cohere_api_key }}
+    PERPLEXITY_API_KEY: ${{ inputs.perplexity_api_key }}
+    ANYSCALE_API_KEY: ${{ inputs.anyscale_api_key }}
     # Custom endpoints (optional)
-    CUSTOM_LLM_BASE_URL: ${{ vars.CUSTOM_LLM_BASE_URL }}
-    CUSTOM_LLM_API_KEY: ${{ secrets.CUSTOM_LLM_API_KEY }}
-    # GitHub repository context
-    GITHUB_REPOSITORY: ${{ github.repository }}
-    GITHUB_EVENT_NAME: ${{ github.event_name }}
-    GITHUB_EVENT_PATH: ${{ github.event_path }}
-    GITHUB_WORKSPACE: ${{ github.workspace }}
-    GITHUB_SHA: ${{ github.sha }}
-    GITHUB_REF: ${{ github.ref }}
-    GITHUB_ACTOR: ${{ github.actor }}
+    CUSTOM_LLM_BASE_URL: ${{ inputs.custom_llm_base_url }}
+    CUSTOM_LLM_API_KEY: ${{ inputs.custom_llm_api_key }}
     # Action inputs
     INPUT_MODEL_NAME: ${{ inputs.model_name }}
     INPUT_TRIGGER_PHRASE: ${{ inputs.trigger_phrase }}
