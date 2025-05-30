@@ -25,6 +25,5 @@ jobs:
           max_cost: '5.00'
           allowed_tools: 'str_replace_editor,bash,file_viewer,python_executor'
           custom_instructions: 'Follow our coding standards and include tests for any changes.'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}

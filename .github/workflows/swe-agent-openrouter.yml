@@ -26,6 +26,5 @@ jobs:
           allowed_tools: 'str_replace_editor,bash,file_viewer,python_executor,git_tool'
           custom_instructions: 'Use the most appropriate model for the task complexity.'
           fallback_models: 'openrouter/openai/gpt-4,openrouter/meta-llama/llama-3-70b-instruct'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}

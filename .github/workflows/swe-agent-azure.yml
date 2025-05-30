@@ -26,8 +26,7 @@ jobs:
           allowed_tools: 'str_replace_editor,bash,file_viewer,python_executor,git_tool'
           custom_instructions: 'Follow enterprise security guidelines and coding standards.'
           workspace_timeout: '2400'  # 40 minutes for complex enterprise tasks
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-          AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
-          AZURE_OPENAI_API_VERSION: ${{ vars.AZURE_OPENAI_API_VERSION }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          azure_openai_api_key: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          azure_openai_endpoint: ${{ vars.AZURE_OPENAI_ENDPOINT }}
+          azure_openai_api_version: ${{ vars.AZURE_OPENAI_API_VERSION }}
