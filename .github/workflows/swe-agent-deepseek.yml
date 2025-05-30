@@ -26,8 +26,7 @@ jobs:
           allowed_tools: 'str_replace_editor,bash,file_viewer,python_executor'
           custom_instructions: 'Focus on code quality and best practices.'
           fallback_models: 'deepseek/deepseek-coder,gpt-3.5-turbo'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          deepseek_api_key: ${{ secrets.DEEPSEEK_API_KEY }}
           # Fallback API key
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
