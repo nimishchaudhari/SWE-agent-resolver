@@ -1,0 +1,25 @@
+name: SWE-Agent Assistant
+
+on:
+  issue_comment:
+    types: [created]
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened]
+
+jobs:
+  swe-agent:
+    runs-on: ubuntu-latest
+    if: contains(github.event.comment.body, '@swe-agent') || github.event_name == 'issues' || github.event_name == 'pull_request'
+    
+    steps:
+      - name: SWE-Agent Wrapper
+        uses: nimishchaudhari/swe-agent-resolver@v1
+        with:
+          model_name: 'gpt-4.1-mini'
+          trigger_phrase: '@swe-agent'
+          max_cost: '2.00'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          #GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
