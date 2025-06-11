@@ -22,7 +22,9 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
 WORKDIR /opt
 RUN git clone https://github.com/SWE-agent/SWE-agent.git && \
     cd SWE-agent && \
-    pip install -e .
+    pip install -e . && \
+    git config --global --add safe.directory /opt/SWE-agent && \
+    chown -R vscode:vscode /opt/SWE-agent
 
 # Install additional Python dependencies
 RUN pip install --no-cache-dir \
@@ -57,8 +59,9 @@ COPY *.yaml ./
 RUN mkdir -p /swe-agent-workspace && \
     mkdir -p /tmp/swe-agent-cache && \
     mkdir -p /github/workspace && \
+    mkdir -p /github/workspace/logs && \
     mkdir -p /var/log/swe-agent && \
-    chmod 755 /swe-agent-workspace /tmp/swe-agent-cache /github/workspace /var/log/swe-agent && \
+    chmod -R 777 /swe-agent-workspace /tmp/swe-agent-cache /github/workspace /var/log/swe-agent && \
     chown -R vscode:vscode /action /swe-agent-workspace /tmp/swe-agent-cache /var/log/swe-agent /github/workspace
 
 # Set environment variables for conda/miniconda environment

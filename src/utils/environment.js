@@ -81,9 +81,29 @@ function setupLogging() {
   process.env.LOG_LEVEL = debugMode ? 'debug' : 'info';
   
   // Ensure log directory exists
-  const logDir = path.join(process.env.GITHUB_WORKSPACE || '/tmp', 'logs');
-  if (!fs.existsSync(logDir)) {
-    fs.mkdirSync(logDir, { recursive: true });
+  const preferredLogDir = path.join(process.env.GITHUB_WORKSPACE || '/tmp', 'logs');
+  let logDir = preferredLogDir;
+  
+  try {
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+    // Test write permissions
+    const testFile = path.join(logDir, '.test-write');
+    fs.writeFileSync(testFile, 'test');
+    fs.unlinkSync(testFile);
+  } catch (error) {
+    // Fallback to /tmp if workspace logs directory has permission issues
+    console.warn(`Cannot create logs in ${preferredLogDir}, falling back to /tmp/logs:`, error.message);
+    logDir = '/tmp/logs';
+    try {
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+    } catch (fallbackError) {
+      console.warn(`Cannot create fallback logs directory, using /var/log/swe-agent:`, fallbackError.message);
+      logDir = '/var/log/swe-agent';
+    }
   }
   
   process.env.LOG_DIR = logDir;
