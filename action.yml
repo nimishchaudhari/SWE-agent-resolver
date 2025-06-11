@@ -1,5 +1,5 @@
-name: 'SWE-Agent Resolver'
-description: 'AI-powered code assistance using SWE-agent with LiteLLM support for multiple AI providers'
+name: 'SWE-Agent GitHub Action Wrapper'
+description: 'Lightweight wrapper for seamless SWE-agent integration with GitHub issues and PRs'
 author: 'nimishchaudhari'
 
 branding:
@@ -8,9 +8,9 @@ branding:
 
 inputs:
   model_name:
-    description: 'LiteLLM-compatible model identifier (e.g., gpt-4o, claude-3-5-sonnet-latest, deepseek/deepseek-chat)'
+    description: 'AI model to use (e.g., gpt-4o-mini, claude-3-5-sonnet-latest, deepseek/deepseek-chat)'
     required: true
-    default: 'gpt-4o'
+    default: 'gpt-4o-mini'
   
   trigger_phrase:
     description: 'Phrase to trigger the action in comments'
@@ -22,145 +22,26 @@ inputs:
     required: false
     default: '5.00'
   
-  allowed_tools:
+  tools:
     description: 'Comma-separated list of tools SWE-agent can use'
     required: false
-    default: 'str_replace_editor,bash,file_viewer,python_executor'
-  
-  deployment_type:
-    description: 'Execution environment for SWE-agent'
-    required: false
-    default: 'local'
-  
-  custom_instructions:
-    description: 'Additional context or constraints for the AI agent'
-    required: false
-    default: ''
-  
-  fallback_models:
-    description: 'Comma-separated list of backup models if primary fails'
-    required: false
-    default: 'gpt-3.5-turbo,claude-3-haiku-20240307'
-  
-  workspace_timeout:
-    description: 'Timeout for SWE-agent execution in seconds'
-    required: false
-    default: '1800'
+    default: 'str_replace_editor,bash'
   
   debug_mode:
-    description: 'Enable debug logging and detailed output'
+    description: 'Enable debug logging'
     required: false
     default: 'false'
-  
-  github_token:
-    description: 'GitHub token for API access'
-    required: true
-  
-  openai_api_key:
-    description: 'OpenAI API key (required for OpenAI models)'
-    required: false
-  
-  anthropic_api_key:
-    description: 'Anthropic API key (required for Claude models)'
-    required: false
-  
-  azure_openai_api_key:
-    description: 'Azure OpenAI API key'
-    required: false
-  
-  azure_openai_endpoint:
-    description: 'Azure OpenAI endpoint URL'
-    required: false
-  
-  azure_openai_api_version:
-    description: 'Azure OpenAI API version'
-    required: false
-  
-  openrouter_api_key:
-    description: 'OpenRouter API key'
-    required: false
-  
-  deepseek_api_key:
-    description: 'DeepSeek API key'
-    required: false
-  
-  groq_api_key:
-    description: 'Groq API key'
-    required: false
-  
-  together_api_key:
-    description: 'Together AI API key'
-    required: false
-  
-  mistral_api_key:
-    description: 'Mistral API key'
-    required: false
-  
-  cohere_api_key:
-    description: 'Cohere API key'
-    required: false
-  
-  perplexity_api_key:
-    description: 'Perplexity API key'
-    required: false
-  
-  anyscale_api_key:
-    description: 'Anyscale API key'
-    required: false
-  
-  custom_llm_base_url:
-    description: 'Custom LLM base URL'
-    required: false
-  
-  custom_llm_api_key:
-    description: 'Custom LLM API key'
-    required: false
 
 outputs:
-  execution_status:
-    description: 'Status of the SWE-agent execution (success, failure, timeout)'
-  
-  provider_used:
-    description: 'AI provider that was actually used for execution'
+  status:
+    description: 'Execution status (success, failure, skipped)'
   
   cost_estimate:
     description: 'Estimated cost of the execution'
   
-  patch_applied:
-    description: 'Whether a code patch was successfully applied'
-  
   comment_url:
-    description: 'URL of the status comment created by the action'
+    description: 'URL of the GitHub comment with results'
 
 runs:
   using: 'docker'
   image: 'Dockerfile'
-  env:
-    GITHUB_TOKEN: ${{ inputs.github_token }}
-    # Provider-specific API keys (auto-detected based on model_name)
-    OPENAI_API_KEY: ${{ inputs.openai_api_key }}
-    ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
-    AZURE_OPENAI_API_KEY: ${{ inputs.azure_openai_api_key }}
-    AZURE_OPENAI_ENDPOINT: ${{ inputs.azure_openai_endpoint }}
-    AZURE_OPENAI_API_VERSION: ${{ inputs.azure_openai_api_version }}
-    OPENROUTER_API_KEY: ${{ inputs.openrouter_api_key }}
-    DEEPSEEK_API_KEY: ${{ inputs.deepseek_api_key }}
-    GROQ_API_KEY: ${{ inputs.groq_api_key }}
-    TOGETHER_API_KEY: ${{ inputs.together_api_key }}
-    MISTRAL_API_KEY: ${{ inputs.mistral_api_key }}
-    COHERE_API_KEY: ${{ inputs.cohere_api_key }}
-    PERPLEXITY_API_KEY: ${{ inputs.perplexity_api_key }}
-    ANYSCALE_API_KEY: ${{ inputs.anyscale_api_key }}
-    # Custom endpoints (optional)
-    CUSTOM_LLM_BASE_URL: ${{ inputs.custom_llm_base_url }}
-    CUSTOM_LLM_API_KEY: ${{ inputs.custom_llm_api_key }}
-    # Action inputs
-    INPUT_MODEL_NAME: ${{ inputs.model_name }}
-    INPUT_TRIGGER_PHRASE: ${{ inputs.trigger_phrase }}
-    INPUT_MAX_COST: ${{ inputs.max_cost }}
-    INPUT_ALLOWED_TOOLS: ${{ inputs.allowed_tools }}
-    INPUT_DEPLOYMENT_TYPE: ${{ inputs.deployment_type }}
-    INPUT_CUSTOM_INSTRUCTIONS: ${{ inputs.custom_instructions }}
-    INPUT_FALLBACK_MODELS: ${{ inputs.fallback_models }}
-    INPUT_WORKSPACE_TIMEOUT: ${{ inputs.workspace_timeout }}
-    INPUT_DEBUG_MODE: ${{ inputs.debug_mode }}
