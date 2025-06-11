@@ -14,7 +14,7 @@ logs
 README.md
 .eslintrc*
 .prettierrc*
-jest.config.js
+# jest.config.js - needed for Docker build
 coverage
 .nyc_output
 .vscode

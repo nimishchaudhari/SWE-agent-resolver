@@ -11,10 +11,14 @@ RUN apt-get update && apt-get install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Install SWE-Agent and dependencies
+# Install SWE-Agent from source (official method)
+WORKDIR /opt
+RUN git clone https://github.com/SWE-agent/SWE-agent.git && \
+    cd SWE-agent && \
+    pip install --no-cache-dir -e .
+
+# Install additional Python dependencies
 RUN pip install --no-cache-dir \
-    sweagent \
-    swe-agent \
     litellm \
     openai \
     anthropic \
@@ -74,9 +78,9 @@ RUN useradd -m -u 1001 sweagent && \
     chown -R sweagent:sweagent /action /swe-agent-workspace /tmp/swe-agent-cache /var/log/swe-agent
 
 # Set environment variables
-ENV PYTHONPATH="/usr/local/lib/python3.11/site-packages:/action/src:$PYTHONPATH"
+ENV PYTHONPATH="/usr/local/lib/python3.11/site-packages:/action/src"
 ENV PATH="/usr/local/bin:$PATH"
-ENV NODE_PATH="/action/node_modules:$NODE_PATH"
+ENV NODE_PATH="/action/node_modules"
 ENV LOG_DIR="/var/log/swe-agent"
 
 # GitHub Actions environment
@@ -86,14 +90,15 @@ ENV CI=true
 # SWE-Agent specific environment
 ENV SWE_AGENT_WORKSPACE=/swe-agent-workspace
 ENV SWE_AGENT_CACHE_DIR=/tmp/swe-agent-cache
+ENV SWE_AGENT_HOME=/usr/local/lib/python3.11/site-packages/sweagent
 
 # Switch to non-root user for security
 USER sweagent
 
 # Verify installations
-RUN python3 -c "import sweagent; print('SWE-Agent installed successfully')" || \
-    python3 -c "print('SWE-Agent import failed, but continuing...')"
-RUN python3 -c "import litellm; print('LiteLLM installed successfully')"
+RUN python3 -c "import litellm; print('✅ LiteLLM installed successfully')"
+RUN sweagent --help > /dev/null && echo "✅ SWE-Agent CLI available" || echo "⚠️ SWE-Agent CLI not available"
+RUN python3 -c "import sweagent; print('✅ SWE-Agent Python package available')" || echo "⚠️ SWE-Agent Python package not available"
 RUN node --version && npm --version
 
 # Entry point for GitHub Action

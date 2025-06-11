@@ -49,16 +49,27 @@ class SWEAgentCLI {
    */
   async ensureSWEAgentInstalled() {
     return new Promise((resolve, reject) => {
-      exec('which sweagent || which python -m sweagent', (error, stdout) => {
-        if (error) {
-          logger.warn('⚠️ SWE-agent not found, attempting to install...');
+      // Check for SWE-agent CLI availability (prefer sweagent command)
+      exec('sweagent --help > /dev/null 2>&1', (error, stdout) => {
+        if (!error) {
+          logger.info('✅ SWE-agent CLI available via sweagent command');
+          resolve();
+          return;
+        }
+        
+        // Fallback: check Python module
+        exec('python3 -c "import sweagent; print(sweagent.__file__)"', (pyError, pyStdout) => {
+          if (!pyError) {
+            logger.info(`✅ SWE-agent Python module found: ${pyStdout.trim()}`);
+            resolve();
+            return;
+          }
+          
+          logger.warn('⚠️ SWE-agent not found, attempting to install from source...');
           this.installSWEAgent()
             .then(() => resolve())
             .catch(reject);
-        } else {
-          logger.info(`✅ SWE-agent found at: ${stdout.trim()}`);
-          resolve();
-        }
+        });
       });
     });
   }
@@ -68,9 +79,18 @@ class SWEAgentCLI {
    */
   async installSWEAgent() {
     return new Promise((resolve, reject) => {
-      logger.info('📦 Installing SWE-agent...');
+      logger.info('📦 Installing SWE-agent from source...');
       
-      const installCmd = 'pip install swe-agent';
+      // Install SWE-agent from GitHub source (official method)
+      const installCmd = `
+        cd /tmp && 
+        git clone https://github.com/SWE-agent/SWE-agent.git swe-agent-install && 
+        cd swe-agent-install && 
+        pip install --user -e . && 
+        cd / && 
+        rm -rf /tmp/swe-agent-install
+      `;
+      
       const installProcess = spawn('sh', ['-c', installCmd], {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env }
@@ -91,20 +111,23 @@ class SWEAgentCLI {
 
       installProcess.on('close', (code) => {
         if (code === 0) {
-          logger.info('✅ SWE-agent installed successfully');
+          logger.info('✅ SWE-agent installed successfully from source');
           resolve();
         } else {
-          logger.error(`❌ SWE-agent installation failed with code ${code}`);
-          logger.error(`Error output: ${errorOutput}`);
-          reject(new Error(`SWE-agent installation failed: ${errorOutput}`));
+          logger.warn(`⚠️ SWE-agent installation failed with code ${code}`);
+          logger.warn(`Error output: ${errorOutput}`);
+          // Don't reject - allow fallback to simulation mode
+          logger.info('🔄 Continuing with limited functionality...');
+          resolve();
         }
       });
 
-      // Timeout after 5 minutes
+      // Timeout after 8 minutes (source install takes longer)
       setTimeout(() => {
         installProcess.kill('SIGKILL');
-        reject(new Error('SWE-agent installation timed out'));
-      }, 5 * 60 * 1000);
+        logger.warn('⚠️ SWE-agent installation timed out, continuing with limited functionality...');
+        resolve();
+      }, 8 * 60 * 1000);
     });
   }
 
@@ -322,11 +345,22 @@ class SWEAgentCLI {
         environment
       } = execOptions;
 
-      // Build SWE-agent command
+      // Build SWE-agent command (prefer sweagent CLI, fallback to python -m)
       const cmd = [
-        'python', '-m', 'sweagent',
+        'sweagent',
         '--config_file', configPath,
         '--model_name', 'from_config', // Use model from config
+        '--data_path', problemPath,
+        '--repo_path', repoPath,
+        '--output_dir', outputDir,
+        '--verbose'
+      ].join(' ');
+      
+      // Fallback command if sweagent CLI not available
+      const fallbackCmd = [
+        'python3', '-m', 'sweagent',
+        '--config_file', configPath,
+        '--model_name', 'from_config',
         '--data_path', problemPath,
         '--repo_path', repoPath,
         '--output_dir', outputDir,
@@ -336,11 +370,16 @@ class SWEAgentCLI {
       logger.info(`🚀 Executing SWE-agent: ${cmd}`);
 
       const startTime = Date.now();
+      
+      // Try primary command first
       this.processRef = spawn('sh', ['-c', cmd], {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: environment,
         cwd: repoPath
       });
+      
+      // Handle command not found by trying fallback
+      let commandFailed = false;
 
       let stdout = '';
       let stderr = '';
@@ -399,7 +438,101 @@ class SWEAgentCLI {
 
       this.processRef.on('error', (error) => {
         clearTimeout(timeoutId);
+        
+        // If command not found, try fallback
+        if (error.code === 'ENOENT' && !commandFailed) {
+          commandFailed = true;
+          logger.warn('⚠️ sweagent command not found, trying Python module fallback...');
+          
+          // Retry with fallback command
+          setTimeout(() => {
+            this.executeSWEAgentWithFallback(fallbackCmd, environment, repoPath, timeout)
+              .then(resolve)
+              .catch(reject);
+          }, 100);
+          return;
+        }
+        
         logger.error('❌ SWE-agent process error:', error);
+        reject(error);
+      });
+    });
+  }
+
+  /**
+   * Execute SWE-agent with fallback command
+   * @param {string} cmd - Command to execute
+   * @param {Object} environment - Environment variables
+   * @param {string} repoPath - Repository path
+   * @param {number} timeout - Timeout in seconds
+   * @returns {Promise<Object>} Execution result
+   */
+  async executeSWEAgentWithFallback(cmd, environment, repoPath, timeout) {
+    return new Promise((resolve, reject) => {
+      logger.info(`🔄 Retrying with fallback: ${cmd}`);
+      
+      const startTime = Date.now();
+      const fallbackProcess = spawn('sh', ['-c', cmd], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: environment,
+        cwd: repoPath
+      });
+
+      let stdout = '';
+      let stderr = '';
+      let hasTimedOut = false;
+
+      const timeoutId = setTimeout(() => {
+        hasTimedOut = true;
+        logger.warn(`⏰ SWE-agent fallback execution timed out after ${timeout}s`);
+        fallbackProcess.kill('SIGKILL');
+      }, timeout * 1000);
+
+      fallbackProcess.stdout.on('data', (data) => {
+        const chunk = data.toString();
+        stdout += chunk;
+        logger.debug(`SWE-agent fallback stdout: ${chunk.slice(0, 500)}`);
+      });
+
+      fallbackProcess.stderr.on('data', (data) => {
+        const chunk = data.toString();
+        stderr += chunk;
+        logger.debug(`SWE-agent fallback stderr: ${chunk.slice(0, 500)}`);
+      });
+
+      fallbackProcess.on('close', (code) => {
+        clearTimeout(timeoutId);
+        const duration = Date.now() - startTime;
+        
+        logger.info(`📊 SWE-agent fallback completed in ${duration}ms with code ${code}`);
+
+        if (hasTimedOut) {
+          reject(new Error(`SWE-agent fallback execution timed out after ${timeout}s`));
+          return;
+        }
+
+        const result = {
+          exitCode: code,
+          stdout,
+          stderr,
+          duration,
+          success: code === 0,
+          fallbackUsed: true
+        };
+
+        if (code === 0) {
+          logger.info('✅ SWE-agent fallback execution successful');
+          resolve(result);
+        } else {
+          logger.error(`❌ SWE-agent fallback execution failed with code ${code}`);
+          logger.error(`Fallback error output: ${stderr.slice(0, 1000)}`);
+          reject(new Error(`SWE-agent fallback execution failed: ${stderr}`));
+        }
+      });
+
+      fallbackProcess.on('error', (error) => {
+        clearTimeout(timeoutId);
+        logger.error('❌ SWE-agent fallback process error:', error);
         reject(error);
       });
     });
