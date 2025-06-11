@@ -28,6 +28,12 @@ module.exports = {
       setupFilesAfterEnv: ['<rootDir>/test/helpers/integration-setup.js']
     },
     {
+      displayName: 'real',
+      testMatch: ['<rootDir>/test/real/**/*.test.js'],
+      testEnvironment: 'node',
+      testTimeout: 60000
+    },
+    {
       displayName: 'e2e',
       testMatch: ['<rootDir>/test/e2e/**/*.test.js'],
       testEnvironment: 'node',

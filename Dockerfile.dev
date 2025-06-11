@@ -1,0 +1,69 @@
+# Development Dockerfile with hot reloading
+FROM node:18-slim AS development
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    python3 \
+    python3-pip \
+    python3-venv \
+    build-essential \
+    gcc \
+    g++ \
+    vim \
+    nano \
+    htop \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+RUN pip install --no-cache-dir \
+    sweagent \
+    swe-agent \
+    litellm \
+    openai \
+    anthropic \
+    pyyaml \
+    requests \
+    jinja2 \
+    python-dotenv \
+    gitpython
+
+# Create action directory
+WORKDIR /action
+
+# Install development dependencies
+COPY package*.json ./
+RUN npm install  # Install all dependencies including dev
+
+# Copy source code
+COPY . .
+
+# Create directories
+RUN mkdir -p /swe-agent-workspace && \
+    mkdir -p /tmp/swe-agent-cache && \
+    mkdir -p /var/log/swe-agent && \
+    mkdir -p /action/output && \
+    chmod 755 /swe-agent-workspace /tmp/swe-agent-cache /var/log/swe-agent /action/output
+
+# Set environment variables
+ENV PYTHONPATH="/usr/local/lib/python3.11/site-packages:/action/src:$PYTHONPATH"
+ENV PATH="/usr/local/bin:$PATH"
+ENV NODE_PATH="/action/node_modules:$NODE_PATH"
+ENV LOG_DIR="/var/log/swe-agent"
+ENV NODE_ENV=development
+ENV DEBUG=swe-agent:*
+
+# GitHub Actions environment
+ENV GITHUB_ACTIONS=true
+ENV CI=false
+
+# SWE-Agent specific environment
+ENV SWE_AGENT_WORKSPACE=/swe-agent-workspace
+ENV SWE_AGENT_CACHE_DIR=/tmp/swe-agent-cache
+
+# Development server for testing
+EXPOSE 3000 9229
+
+# Default command for development
+CMD ["npm", "run", "dev"]

@@ -131,7 +131,8 @@ class ErrorHandler {
       'rate_limit',
       'server_error',
       'timeout',
-      'context_length'
+      'context_length',
+      'content_filter'
     ];
     return fallbackErrors.includes(errorType);
   }
@@ -289,7 +290,7 @@ class ErrorHandler {
       'model_unavailable': 0 // No delay for unavailable models
     };
     
-    return baseDelays[errorType] || 1000;
+    return baseDelays.hasOwnProperty(errorType) ? baseDelays[errorType] : 1000;
   }
 
   /**

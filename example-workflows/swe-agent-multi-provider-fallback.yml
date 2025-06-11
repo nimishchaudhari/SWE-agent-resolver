@@ -1,0 +1,48 @@
+name: SWE-Agent with Multi-Provider Fallback
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  swe-agent:
+    runs-on: ubuntu-latest
+    if: >
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@swe-agent')) ||
+      (github.event_name == 'pull_request')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: SWE-Agent Resolver
+        uses: ./
+        with:
+          # Primary: Claude 3.5 Sonnet (high capability)
+          model_name: 'claude-3-5-sonnet-latest'
+          trigger_phrase: '@swe-agent'
+          max_cost: '10.00'
+          
+          # Fallback chain: Claude → OpenAI → DeepSeek (cost-effective)
+          fallback_models: 'gpt-4.1-mini,deepseek/deepseek-chat,gpt-3.5-turbo'
+          
+          allowed_tools: 'str_replace_editor,bash,file_viewer,python_executor'
+          workspace_timeout: '3600'  # 1 hour for complex tasks
+          debug_mode: 'false'
+        env:
+          # Primary provider
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          
+          # Fallback providers
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cost Report
+        if: always()
+        run: |
+          echo "## 💰 SWE-Agent Cost Report" >> $GITHUB_STEP_SUMMARY
+          echo "Check the action logs for detailed cost breakdown" >> $GITHUB_STEP_SUMMARY

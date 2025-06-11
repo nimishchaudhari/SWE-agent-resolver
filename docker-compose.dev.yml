@@ -1,0 +1,115 @@
+version: '3.8'
+
+# Development override for hot reloading and debugging
+services:
+  swe-agent-resolver:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: development
+    volumes:
+      # Mount source code for hot reloading
+      - ./src:/action/src
+      - ./action:/action/action
+      - ./test:/action/test
+      - ./package.json:/action/package.json
+      - ./package-lock.json:/action/package-lock.json
+      
+      # Mount test workspace and logs
+      - ./test-workspace:/test-workspace
+      - ./test-logs:/var/log/swe-agent
+      - ./test-output:/action/output
+      
+      # Mount node_modules as named volume for performance
+      - node_modules:/action/node_modules
+    environment:
+      # Development settings
+      - NODE_ENV=development
+      - DEBUG=swe-agent:*
+      - LOG_LEVEL=debug
+      
+      # Hot reloading
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    command: |
+      sh -c "
+        npm install && 
+        npm run dev
+      "
+    ports:
+      - "9229:9229"  # Node.js debugger
+      - "3000:3000"  # Main service
+    user: root  # For development convenience
+  
+  # Development webhook receiver for testing
+  webhook-dev:
+    image: node:18-alpine
+    command: |
+      sh -c "
+        npm install -g nodemon express body-parser &&
+        cat > server.js << 'EOF'
+        const express = require('express');
+        const bodyParser = require('body-parser');
+        const app = express();
+        
+        app.use(bodyParser.json());
+        app.use(bodyParser.urlencoded({ extended: true }));
+        
+        // Webhook endpoint
+        app.post('/webhook', (req, res) => {
+          console.log('🎣 Webhook received:', JSON.stringify(req.body, null, 2));
+          res.json({ status: 'received' });
+        });
+        
+        // Health check
+        app.get('/health', (req, res) => {
+          res.json({ status: 'ok', timestamp: new Date().toISOString() });
+        });
+        
+        // Trigger endpoints for testing
+        app.post('/trigger/issue', (req, res) => {
+          const payload = {
+            action: 'created',
+            issue: {
+              number: 1,
+              title: 'Test issue',
+              body: 'This is a test issue for SWE-agent',
+              user: { login: 'test-user' }
+            },
+            comment: {
+              body: '@swe-agent analyze this issue',
+              user: { login: 'test-user' }
+            },
+            repository: {
+              name: 'test-repo',
+              owner: { login: 'test-org' },
+              full_name: 'test-org/test-repo'
+            },
+            sender: { login: 'test-user' }
+          };
+          
+          console.log('🎯 Triggering issue comment:', payload);
+          res.json(payload);
+        });
+        
+        app.listen(3000, () => {
+          console.log('🎣 Webhook development server running on port 3000');
+          console.log('📋 Endpoints:');
+          console.log('  POST /webhook - Receive webhooks');
+          console.log('  POST /trigger/issue - Trigger test issue comment');
+          console.log('  GET /health - Health check');
+        });
+        EOF
+        
+        nodemon server.js
+      "
+    ports:
+      - "3003:3000"
+    volumes:
+      - ./test-logs:/logs
+    networks:
+      - swe-agent-network
+
+volumes:
+  node_modules:
+    driver: local

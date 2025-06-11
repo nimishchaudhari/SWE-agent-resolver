@@ -135,7 +135,7 @@ class ProviderManager {
 
     // Basic format validation
     const validationRules = {
-      'OPENAI_API_KEY': /^sk-[a-zA-Z0-9]{48,}$/,
+      'OPENAI_API_KEY': /^sk-[a-zA-Z0-9\-_]{48,}$|^sk-proj-[a-zA-Z0-9\-_]{120,}$/,
       'ANTHROPIC_API_KEY': /^sk-ant-[a-zA-Z0-9\-_]{95,}$/,
       'AZURE_OPENAI_API_KEY': /^[a-f0-9]{32}$/,
       'DEEPSEEK_API_KEY': /^sk-[a-zA-Z0-9]{48,}$/,
@@ -243,7 +243,7 @@ class ProviderManager {
       'openai': ['gpt-3.5-turbo', 'gpt-4'],
       'anthropic': ['claude-3-haiku-20240307', 'claude-3-5-sonnet-20241022'],
       'azure': ['azure/gpt-35-turbo', 'azure/gpt-4'],
-      'deepseek': ['deepseek/deepseek-chat'],
+      'deepseek': ['deepseek/deepseek-chat', 'deepseek/deepseek-coder'],
       'openrouter': ['openrouter/anthropic/claude-3.5-sonnet', 'openrouter/openai/gpt-4'],
       'together': ['together/meta-llama/Llama-2-70b-chat-hf'],
       'groq': ['groq/llama2-70b-4096', 'groq/mixtral-8x7b-32768']

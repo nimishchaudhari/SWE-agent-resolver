@@ -1,0 +1,149 @@
+version: '3.8'
+
+services:
+  # Main SWE-Agent Resolver service
+  swe-agent-resolver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./test-workspace:/test-workspace
+      - ./test-logs:/var/log/swe-agent
+      - /var/run/docker.sock:/var/run/docker.sock  # For Docker-in-Docker if needed
+    environment:
+      # GitHub simulation
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-dummy-token}
+      - GITHUB_WORKSPACE=/test-workspace
+      - GITHUB_EVENT_NAME=issue_comment
+      - GITHUB_EVENT_PATH=/test-workspace/github-event.json
+      - GITHUB_REPOSITORY=test-org/test-repo
+      - GITHUB_SHA=abc123
+      - GITHUB_REF=refs/heads/main
+      - GITHUB_ACTOR=test-user
+      
+      # Action inputs
+      - INPUT_MODEL_NAME=${MODEL_NAME:-gpt-3.5-turbo}
+      - INPUT_TRIGGER_PHRASE=@swe-agent
+      - INPUT_MAX_COST=5.00
+      - INPUT_DEBUG_MODE=true
+      - INPUT_WORKSPACE_TIMEOUT=1800
+      
+      # Provider API keys (use your real keys for testing)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      
+      # Logging
+      - LOG_LEVEL=debug
+      - NODE_ENV=development
+    ports:
+      - "3000:3000"  # For webhook simulation
+    depends_on:
+      - webhook-simulator
+    networks:
+      - swe-agent-network
+  
+  # GitHub webhook simulator
+  webhook-simulator:
+    image: node:18-alpine
+    command: |
+      sh -c "
+        npm install -g json-server &&
+        echo 'Starting webhook simulator...' &&
+        sleep infinity
+      "
+    volumes:
+      - ./test/fixtures:/data
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=development
+    networks:
+      - swe-agent-network
+  
+  # Test repository server (serves a git repository for testing)
+  test-repo-server:
+    image: nginx:alpine
+    volumes:
+      - ./test/fixtures/test-repo:/usr/share/nginx/html
+    ports:
+      - "8080:80"
+    networks:
+      - swe-agent-network
+  
+  # Database for storing test results (optional)
+  test-db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=swe_agent_test
+      - POSTGRES_USER=test
+      - POSTGRES_PASSWORD=test123
+    volumes:
+      - test-db-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - swe-agent-network
+  
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - swe-agent-network
+  
+  # Provider cost tracking service
+  cost-tracker:
+    image: node:18-alpine
+    command: |
+      sh -c "
+        npm install express cors &&
+        node -e \"
+          const express = require('express');
+          const cors = require('cors');
+          const app = express();
+          app.use(cors());
+          app.use(express.json());
+          
+          let costs = [];
+          
+          app.post('/api/costs', (req, res) => {
+            costs.push({ ...req.body, timestamp: new Date() });
+            res.json({ success: true });
+          });
+          
+          app.get('/api/costs', (req, res) => {
+            res.json(costs);
+          });
+          
+          app.get('/api/costs/summary', (req, res) => {
+            const total = costs.reduce((sum, cost) => sum + parseFloat(cost.totalCost || 0), 0);
+            res.json({ 
+              totalCost: total.toFixed(4),
+              requestCount: costs.length,
+              providers: [...new Set(costs.map(c => c.provider))]
+            });
+          });
+          
+          app.listen(3000, () => console.log('Cost tracker running on port 3000'));
+        \"
+      "
+    ports:
+      - "3002:3000"
+    networks:
+      - swe-agent-network
+
+volumes:
+  test-db-data:
+    driver: local
+
+networks:
+  swe-agent-network:
+    driver: bridge
+
+# Development override
+# Use: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+# For development mode with hot reloading

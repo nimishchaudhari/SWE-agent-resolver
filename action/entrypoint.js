@@ -12,6 +12,10 @@ const ProviderManager = require('./provider-manager');
 const SWEAgentConfigGenerator = require('./swe-agent-config-generator');
 const CommentHandler = require('./comment-handler');
 const ErrorHandler = require('./error-handler');
+const SWEAgentCLI = require('../src/swe-agent-cli');
+const WorkspaceManager = require('../src/workspace-manager');
+const logger = require('../src/utils/logger');
+const { validateInputs, getSafeEnvironment } = require('../src/utils/environment');
 const core = require('@actions/core');
 const github = require('@actions/github');
 
@@ -24,7 +28,9 @@ class SWEAgentAction {
     this.providerManager = new ProviderManager();
     this.configGenerator = new SWEAgentConfigGenerator();
     this.commentHandler = new CommentHandler(this.octokit, this.providerManager);
-    this.errorHandler = new ErrorHandler(this.providerManager, this.logger);
+    this.errorHandler = new ErrorHandler(this.providerManager, logger);
+    this.sweAgentCLI = new SWEAgentCLI();
+    this.workspaceManager = null; // Will be initialized with workspace
     
     // Action inputs
     this.inputs = {
@@ -50,7 +56,7 @@ class SWEAgentAction {
       actor: process.env.GITHUB_ACTOR
     };
 
-    this.logger = console;
+    this.logger = logger;
   }
 
   /**
@@ -58,33 +64,44 @@ class SWEAgentAction {
    */
   async run() {
     try {
-      this.logger.log('🚀 Starting SWE-Agent Resolver Action');
-      this.logger.log(`📋 Event: ${this.context.eventName}`);
-      this.logger.log(`🤖 Model: ${this.inputs.modelName}`);
+      this.logger.info('🚀 Starting SWE-Agent Resolver Action');
+      this.logger.info(`📋 Event: ${this.context.eventName}`);
+      this.logger.info(`🤖 Model: ${this.inputs.modelName}`);
       
+      // Validate inputs
+      const inputValidation = validateInputs(this.inputs);
+      if (!inputValidation.valid) {
+        throw new Error(`Input validation failed: ${inputValidation.errors.join(', ')}`);
+      }
+
       // Load GitHub event payload
       const eventPayload = await this.loadEventPayload();
+      this.logger.logGitHubEvent(eventPayload);
       
       // Check if this event should trigger the action
       const shouldProcess = await this.shouldProcessEvent(eventPayload);
       if (!shouldProcess) {
-        this.logger.log('⏭️ Event does not require processing');
+        this.logger.info('⏭️ Event does not require processing');
         return this.setOutput('execution_status', 'skipped');
       }
 
       // Extract context from the event
       const context = await this.extractContext(eventPayload);
-      this.logger.log(`📝 Extracted context for ${context.type}: ${context.title}`);
+      this.logger.info(`📝 Extracted context for ${context.type}: ${context.title}`);
 
       // Detect and validate provider
       const providerInfo = this.providerManager.detectProvider(this.inputs.modelName);
-      this.logger.log(`🔍 Detected provider: ${providerInfo.provider}`);
+      this.logger.logProvider(providerInfo.provider, this.inputs.modelName, 'detected');
       
       const validation = this.providerManager.validateApiKey(providerInfo);
       if (!validation.valid) {
         await this.handleError(context, `❌ ${validation.error}. ${validation.suggestion}`);
         return this.setOutput('execution_status', 'failed');
       }
+
+      // Initialize SWE-agent CLI
+      await this.sweAgentCLI.initialize();
+      this.workspaceManager = new WorkspaceManager(this.sweAgentCLI.workspaceDir);
 
       // Create initial status comment
       const statusComment = await this.commentHandler.createStatusComment(
@@ -93,22 +110,29 @@ class SWEAgentAction {
         'initializing'
       );
 
-      // Generate SWE-agent configuration
-      this.logger.log('⚙️ Generating SWE-agent configuration');
-      const sweConfig = await this.generateSWEConfig(context);
-      
-      // Update status: starting execution
-      await this.commentHandler.updateStatusComment(
-        statusComment.id,
-        context,
-        this.inputs.modelName,
-        'executing',
-        null,
-        'Executing SWE-agent with AI model...'
-      );
+      let result;
+      try {
+        // Generate SWE-agent configuration
+        this.logger.info('⚙️ Generating SWE-agent configuration');
+        const sweConfig = await this.generateSWEConfig(context);
+        
+        // Update status: starting execution
+        await this.commentHandler.updateStatusComment(
+          statusComment.id,
+          context,
+          this.inputs.modelName,
+          'executing',
+          null,
+          'Executing SWE-agent with AI model...'
+        );
 
-      // Execute SWE-agent
-      const result = await this.executeSWEAgent(sweConfig, context);
+        // Execute SWE-agent with fallback support
+        result = await this.executeSWEAgent(sweConfig, context);
+        
+      } finally {
+        // Always cleanup resources
+        await this.cleanup();
+      }
       
       // Update final status
       await this.commentHandler.updateStatusComment(
@@ -116,21 +140,22 @@ class SWEAgentAction {
         context,
         this.inputs.modelName,
         result.status,
-        result.costEstimate,
+        result.cost,
         result.summary
       );
 
       // Set action outputs
       this.setOutput('execution_status', result.status);
       this.setOutput('provider_used', providerInfo.provider);
-      this.setOutput('cost_estimate', result.costEstimate?.totalCost || '0.00');
+      this.setOutput('cost_estimate', result.cost?.totalCost || '0.00');
       this.setOutput('patch_applied', result.patchApplied || false);
       this.setOutput('comment_url', statusComment.html_url);
 
-      this.logger.log(`✅ Action completed with status: ${result.status}`);
+      this.logger.info(`✅ Action completed with status: ${result.status}`);
 
     } catch (error) {
       this.logger.error('❌ Action failed:', error);
+      await this.cleanup();
       this.setOutput('execution_status', 'error');
       
       if (error.message) {
@@ -288,11 +313,11 @@ class SWEAgentAction {
    */
   async executeSWEAgent(config, context) {
     try {
-      this.logger.log('🔧 Writing SWE-agent configuration');
-      const configPath = '/tmp/swe-agent-config.yaml';
+      this.logger.info('🔧 Writing SWE-agent configuration');
+      const configPath = path.join(this.sweAgentCLI.workspaceDir, 'configs', 'swe-agent-config.yaml');
       await fs.writeFile(configPath, config);
 
-      this.logger.log('▶️ Starting SWE-agent execution with fallback support');
+      this.logger.info('▶️ Starting SWE-agent execution with fallback support');
       
       // Execute with error handling and fallback
       const operation = async (modelName, execContext) => {
@@ -318,7 +343,7 @@ class SWEAgentAction {
         status: 'failed',
         summary: errorMessage,
         patchApplied: false,
-        costEstimate: error.totalCost || null,
+        cost: error.totalCost || null,
         error: error
       };
     }
@@ -328,44 +353,83 @@ class SWEAgentAction {
    * Execute SWE-agent with a specific model
    */
   async executeSWEAgentWithModel(configPath, modelName, context, execContext) {
-    // Update config with current model
     const providerInfo = this.providerManager.detectProvider(modelName);
-    this.logger.log(`🤖 Executing with ${modelName} (${providerInfo.provider})`);
+    this.logger.logProvider(providerInfo.provider, modelName, 'executing');
     
-    // Simulate potential failures for demonstration
-    if (execContext.attempt === 0 && Math.random() < 0.1) {
-      // Simulate random failures
-      const errorTypes = ['rate_limit', 'server_error', 'timeout'];
-      const errorType = errorTypes[Math.floor(Math.random() * errorTypes.length)];
-      const error = new Error(`Simulated ${errorType} error`);
-      error.statusCode = errorType === 'rate_limit' ? 429 : 500;
+    try {
+      // Update configuration with current model
+      await this.updateConfigForModel(configPath, modelName);
+      
+      // Execute real SWE-agent CLI
+      const result = await this.logger.logPerformance(
+        `SWE-agent execution with ${modelName}`,
+        async () => {
+          return await this.sweAgentCLI.execute(configPath, context, {
+            timeout: this.inputs.workspaceTimeout,
+            maxTokens: 4000
+          });
+        }
+      );
+      
+      // Apply patches if any were generated
+      if (result.patches && result.patches.length > 0) {
+        this.logger.info(`🔧 Applying ${result.patches.length} patch(es)`);
+        const patchResult = await this.workspaceManager.applyPatches(
+          path.join(this.sweAgentCLI.workspaceDir, 'repos', context.repoName),
+          result.patches,
+          context
+        );
+        
+        result.patchApplied = patchResult.applied;
+        result.patchDetails = patchResult;
+      }
+      
+      // Calculate cost estimate
+      const costEstimate = this.providerManager.getCostEstimate(providerInfo.provider, 3000);
+      result.cost = costEstimate;
+      
+      this.logger.logCost(costEstimate);
+      this.logger.logProvider(providerInfo.provider, modelName, 'completed');
+      
+      return result;
+      
+    } catch (error) {
+      this.logger.error(`❌ SWE-agent execution failed with ${modelName}:`, error);
+      
+      // Add provider context to error
+      error.provider = providerInfo.provider;
+      error.model = modelName;
+      error.attempt = execContext.attempt;
+      
       throw error;
     }
-    
-    // Simulate processing time based on provider
-    const processingTimes = {
-      'groq': 1000,      // Fastest
-      'deepseek': 2000,  // Fast
-      'openai': 3000,    // Medium
-      'anthropic': 4000, // Slower but thorough
-      'azure': 3500,     // Enterprise
-      'openrouter': 2500 // Varies
-    };
-    
-    const processingTime = processingTimes[providerInfo.provider] || 3000;
-    await new Promise(resolve => setTimeout(resolve, processingTime));
-    
-    const costEstimate = this.providerManager.getCostEstimate(providerInfo.provider, 3000);
-    
-    return {
-      status: 'success',
-      summary: `Analysis completed using ${modelName}. Identified potential improvements and suggestions.`,
-      patchApplied: false,
-      cost: parseFloat(costEstimate.totalCost),
-      costEstimate: costEstimate,
-      output: `SWE-agent analysis for ${context.title} using ${providerInfo.provider}`,
-      processingTime: processingTime
-    };
+  }
+
+  /**
+   * Update configuration file with specific model
+   */
+  async updateConfigForModel(configPath, modelName) {
+    try {
+      const configContent = await fs.readFile(configPath, 'utf8');
+      const yaml = require('js-yaml');
+      const config = yaml.load(configContent);
+      
+      // Update model in config
+      const providerInfo = this.providerManager.detectProvider(modelName);
+      const litellmConfig = this.providerManager.generateLiteLLMConfig(modelName);
+      
+      config.agent.model = litellmConfig.config;
+      
+      // Write updated config
+      const updatedContent = yaml.dump(config);
+      await fs.writeFile(configPath, updatedContent);
+      
+      this.logger.debug(`Updated config for model: ${modelName}`);
+      
+    } catch (error) {
+      this.logger.error('Failed to update config for model:', error);
+      throw error;
+    }
   }
 
   /**
@@ -376,6 +440,23 @@ class SWEAgentAction {
       await this.commentHandler.createErrorComment(context, message);
     } catch (commentError) {
       this.logger.error('Failed to create error comment:', commentError);
+    }
+  }
+
+  /**
+   * Cleanup resources
+   */
+  async cleanup() {
+    try {
+      if (this.sweAgentCLI) {
+        await this.sweAgentCLI.cleanup();
+      }
+      if (this.workspaceManager) {
+        await this.workspaceManager.cleanup();
+      }
+      this.logger.info('🧹 Cleanup completed');
+    } catch (error) {
+      this.logger.error('❌ Cleanup failed:', error);
     }
   }
 
