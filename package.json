@@ -2,10 +2,10 @@
   "name": "swe-agent-github-action",
   "version": "1.0.0",
   "description": "GitHub Action wrapper for SWE-agent CLI",
-  "main": "src/index.js",
+  "main": "action/entrypoint.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon --inspect src/index.js",
+    "start": "node action/entrypoint.js",
+    "dev": "nodemon --inspect action/entrypoint.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

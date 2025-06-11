@@ -44,9 +44,10 @@ WORKDIR /action
 COPY package*.json ./
 RUN npm ci --only=production
 
-# Copy action source code and new src directory
+# Copy action source code and simplified structure  
 COPY src/ ./src/
 COPY action/ ./action/
+COPY utils/ ./utils/
 COPY test/ ./test/
 
 # Copy additional required files
@@ -94,4 +95,4 @@ USER root
 RUN mkdir -p /github/file_commands && chmod 777 /github/file_commands
 
 # Entry point for GitHub Action
-ENTRYPOINT ["node", "/action/src/index.js"]
+ENTRYPOINT ["node", "/action/action/entrypoint.js"]

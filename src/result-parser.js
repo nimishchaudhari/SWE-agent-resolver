@@ -67,13 +67,13 @@ class ResultParser {
     }
     
     // Look for summary in stdout
-    const summaryMatch = stdout.match(/SUMMARY:?\s*(.+?)(?:\n\n|\n$|$)/is);
+    const summaryMatch = stdout.match(/SUMMARY:?\s*(.+?)(?=\n[^\s]|\n\n|$)/is);
     if (summaryMatch) {
       return summaryMatch[1].trim();
     }
     
     // Look for conclusion
-    const conclusionMatch = stdout.match(/CONCLUSION:?\s*(.+?)(?:\n\n|\n$|$)/is);
+    const conclusionMatch = stdout.match(/CONCLUSION:?\s*(.+?)(?=\n[^\s]|\n\n|$)/is);
     if (conclusionMatch) {
       return conclusionMatch[1].trim();
     }

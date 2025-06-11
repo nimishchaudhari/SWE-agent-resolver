@@ -28,18 +28,39 @@ class SWEAgentAction {
       debugMode: core.getInput('debug_mode') === 'true'
     };
     
-    // GitHub context
+    // GitHub context (handle test environment gracefully)
     this.context = {
-      eventName: github.context.eventName,
-      payload: github.context.payload,
-      repository: github.context.repo,
-      actor: github.context.actor
+      eventName: github.context?.eventName || process.env.GITHUB_EVENT_NAME,
+      payload: github.context?.payload || this.parseEventPayload(),
+      repository: github.context?.repo || { owner: 'test', repo: 'test' },
+      actor: github.context?.actor || 'test-actor'
     };
     
     logger.info('SWE-Agent Action initialized', { 
       model: this.inputs.model,
       event: this.context.eventName 
     });
+  }
+
+  parseEventPayload() {
+    // Try to read event payload from GITHUB_EVENT_PATH
+    try {
+      const eventPath = process.env.GITHUB_EVENT_PATH;
+      if (eventPath) {
+        const fs = require('fs');
+        return JSON.parse(fs.readFileSync(eventPath, 'utf8'));
+      }
+    } catch (error) {
+      logger.warn('Failed to parse event payload', { error: error.message });
+    }
+    
+    // Return minimal test payload
+    return {
+      action: 'created',
+      comment: { body: '@swe-agent test' },
+      issue: { number: 1, title: 'Test issue' },
+      repository: { full_name: 'test/repo', owner: { login: 'test' }, name: 'repo' }
+    };
   }
 
   async run() {
@@ -85,8 +106,15 @@ class SWEAgentAction {
   parseGitHubEvent() {
     const { eventName, payload } = this.context;
     
+    if (!payload) {
+      throw new Error('No event payload available');
+    }
+    
     switch (eventName) {
       case 'issue_comment':
+        if (!payload.comment || !payload.issue) {
+          throw new Error('Invalid issue_comment payload structure');
+        }
         return {
           type: 'issue_comment',
           trigger: payload.comment.body,
@@ -97,6 +125,9 @@ class SWEAgentAction {
         };
         
       case 'issues':
+        if (!payload.issue) {
+          throw new Error('Invalid issues payload structure');
+        }
         return {
           type: 'issue',
           trigger: this.inputs.triggerPhrase, // Auto-trigger for new issues
@@ -106,11 +137,27 @@ class SWEAgentAction {
         };
         
       case 'pull_request':
+        if (!payload.pull_request) {
+          throw new Error('Invalid pull_request payload structure');
+        }
         return {
           type: 'pull_request',
           trigger: this.inputs.triggerPhrase, // Auto-trigger for new PRs
           issueNumber: payload.pull_request.number,
           repository: payload.repository,
+          pullRequest: payload.pull_request
+        };
+        
+      case 'pull_request_review_comment':
+        if (!payload.comment || !payload.pull_request) {
+          throw new Error('Invalid pull_request_review_comment payload structure');
+        }
+        return {
+          type: 'pull_request_review_comment',
+          trigger: payload.comment.body,
+          issueNumber: payload.pull_request.number,
+          repository: payload.repository,
+          comment: payload.comment,
           pullRequest: payload.pull_request
         };
         

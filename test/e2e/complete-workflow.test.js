@@ -10,7 +10,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const os = require('os');
 const SWEAgentAction = require('../../action/entrypoint');
-const { createTempDirectory } = require('../../src/utils/environment');
+const { setupWorkspace } = require('../../utils/environment');
 
 // Skip E2E tests if environment variable is set
 const SKIP_E2E_TESTS = process.env.SKIP_E2E_TESTS === 'true';
