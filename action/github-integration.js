@@ -21,27 +21,27 @@ class GitHubIntegration {
       result.commentUrl = 'https://github.com/test/repo/issues/1#issuecomment-test';
       return { id: 'test-comment', html_url: result.commentUrl };
     }
-    
+
     try {
       const commentBody = this.formatResultComment(result);
-      
+
       const response = await this.octokit.rest.issues.createComment({
         owner: event.repository.owner.login,
         repo: event.repository.name,
         issue_number: event.issueNumber,
         body: commentBody
       });
-      
-      logger.info('Comment posted successfully', { 
+
+      logger.info('Comment posted successfully', {
         commentId: response.data.id,
-        url: response.data.html_url 
+        url: response.data.html_url
       });
-      
+
       // Update result with comment URL
       result.commentUrl = response.data.html_url;
-      
+
       return response.data;
-      
+
     } catch (error) {
       logger.error('Failed to post comment', { error: error.message });
       throw error;
@@ -54,7 +54,7 @@ class GitHubIntegration {
       logger.info('Test mode: Simulating error comment');
       return { id: 'test-error-comment', html_url: 'https://github.com/test/repo/issues/1#issuecomment-test-error' };
     }
-    
+
     try {
       const commentBody = `## 🤖 SWE-Agent Error
 
@@ -69,10 +69,10 @@ ${errorMessage}
         issue_number: event.issueNumber,
         body: commentBody
       });
-      
+
       logger.info('Error comment posted', { commentId: response.data.id });
       return response.data;
-      
+
     } catch (error) {
       logger.error('Failed to post error comment', { error: error.message });
       // Don't throw here - we don't want to fail the action just because we can't post a comment
@@ -81,7 +81,7 @@ ${errorMessage}
 
   formatResultComment(result) {
     const { success, summary, costEstimate, executionTime, filesChanged, model } = result;
-    
+
     if (!success) {
       return `## 🤖 SWE-Agent Analysis Failed
 
@@ -122,40 +122,40 @@ ${this.formatChanges(filesChanged)}
     }
 
     let changes = '';
-    
+
     for (const file of filesChanged.slice(0, 10)) { // Limit to first 10 files
       const { path: filePath, action, linesAdded, linesRemoved } = file;
       const changeType = this.getChangeIcon(action);
-      
+
       changes += `${changeType} \`${filePath}\``;
-      
+
       if (linesAdded || linesRemoved) {
         changes += ` (+${linesAdded || 0}/-${linesRemoved || 0})`;
       }
-      
+
       changes += '\n';
     }
-    
+
     if (filesChanged.length > 10) {
       changes += `... and ${filesChanged.length - 10} more files\n`;
     }
-    
+
     return changes.trim();
   }
 
   getChangeIcon(action) {
     switch (action) {
-      case 'added':
-      case 'create':
-        return '➕';
-      case 'modified':
-      case 'edit':
-        return '✏️';
-      case 'deleted':
-      case 'remove':
-        return '🗑️';
-      default:
-        return '📝';
+    case 'added':
+    case 'create':
+      return '➕';
+    case 'modified':
+    case 'edit':
+      return '✏️';
+    case 'deleted':
+    case 'remove':
+      return '🗑️';
+    default:
+      return '📝';
     }
   }
 
@@ -163,7 +163,7 @@ ${this.formatChanges(filesChanged)}
     const seconds = Math.floor(milliseconds / 1000);
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
-    
+
     if (minutes > 0) {
       return `${minutes}m ${remainingSeconds}s`;
     } else {
@@ -179,14 +179,14 @@ ${this.formatChanges(filesChanged)}
         comment_id: commentId,
         body: newBody
       });
-      
+
       logger.info('Comment updated successfully', { commentId });
       return response.data;
-      
+
     } catch (error) {
-      logger.error('Failed to update comment', { 
-        commentId, 
-        error: error.message 
+      logger.error('Failed to update comment', {
+        commentId,
+        error: error.message
       });
       throw error;
     }
@@ -209,10 +209,10 @@ ${this.formatChanges(filesChanged)}
         issue_number: event.issueNumber,
         body: commentBody
       });
-      
+
       logger.info('Progress comment posted', { commentId: response.data.id });
       return response.data;
-      
+
     } catch (error) {
       logger.warn('Failed to post progress comment', { error: error.message });
       // Don't throw - this is optional
