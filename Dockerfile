@@ -1,7 +1,7 @@
-# Multi-stage build for SWE-Agent GitHub Action with LiteLLM
-FROM python:3.11-slim AS python-base
+# Use the same base image as SWE-agent Codespaces for compatibility
+FROM mcr.microsoft.com/vscode/devcontainers/miniconda:0-3
 
-# Install system dependencies
+# Install system dependencies and Node.js (following SWE-agent devcontainer setup)
 RUN apt-get update && apt-get install -y \
     git \
     curl \
@@ -9,13 +9,20 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     gcc \
     g++ \
+    vim \
+    nano \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
 
-# Install SWE-Agent from source (official method)
+# Install Node.js (similar to SWE-agent oncreate.sh)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y nodejs
+
+# Install SWE-Agent from source (following devcontainer approach)
 WORKDIR /opt
 RUN git clone https://github.com/SWE-agent/SWE-agent.git && \
     cd SWE-agent && \
-    pip install --no-cache-dir -e .
+    pip install -e .
 
 # Install additional Python dependencies
 RUN pip install --no-cache-dir \
@@ -27,26 +34,6 @@ RUN pip install --no-cache-dir \
     jinja2 \
     python-dotenv \
     gitpython
-
-# Stage 2: Node.js runtime with Python
-FROM node:18-slim
-
-# Install system dependencies including Python
-RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    python3 \
-    python3-pip \
-    python3-venv \
-    build-essential \
-    gcc \
-    g++ \
-    vim \
-    nano \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy Python installation from previous stage
-COPY --from=python-base /usr/local /usr/local
 
 # Create action directory
 WORKDIR /action
@@ -66,20 +53,17 @@ COPY *.md ./
 COPY *.yml ./
 COPY *.yaml ./
 
-# Create workspace and cache directories
+# Create workspace and cache directories with proper permissions
 RUN mkdir -p /swe-agent-workspace && \
     mkdir -p /tmp/swe-agent-cache && \
     mkdir -p /github/workspace && \
     mkdir -p /var/log/swe-agent && \
-    chmod 755 /swe-agent-workspace /tmp/swe-agent-cache /github/workspace /var/log/swe-agent
+    chmod 755 /swe-agent-workspace /tmp/swe-agent-cache /github/workspace /var/log/swe-agent && \
+    chown -R vscode:vscode /action /swe-agent-workspace /tmp/swe-agent-cache /var/log/swe-agent /github/workspace
 
-# Create non-root user for execution
-RUN useradd -m -u 1001 sweagent && \
-    chown -R sweagent:sweagent /action /swe-agent-workspace /tmp/swe-agent-cache /var/log/swe-agent
-
-# Set environment variables
-ENV PYTHONPATH="/usr/local/lib/python3.11/site-packages:/action/src"
-ENV PATH="/usr/local/bin:$PATH"
+# Set environment variables for conda/miniconda environment
+ENV PYTHONPATH="/opt/miniconda/lib/python3.11/site-packages:/action/src"
+ENV PATH="/opt/miniconda/bin:/opt/miniconda/condabin:$PATH"
 ENV NODE_PATH="/action/node_modules"
 ENV LOG_DIR="/var/log/swe-agent"
 
@@ -90,15 +74,14 @@ ENV CI=true
 # SWE-Agent specific environment
 ENV SWE_AGENT_WORKSPACE=/swe-agent-workspace
 ENV SWE_AGENT_CACHE_DIR=/tmp/swe-agent-cache
-ENV SWE_AGENT_HOME=/usr/local/lib/python3.11/site-packages/sweagent
 
-# Switch to non-root user for security
-USER sweagent
+# Switch to vscode user for verification and runtime (matches devcontainer setup)
+USER vscode
 
-# Verify installations
-RUN python3 -c "import litellm; print('✅ LiteLLM installed successfully')"
+# Verify installations with proper environment
+RUN python -c "import litellm; print('✅ LiteLLM installed successfully')"
 RUN sweagent --help > /dev/null && echo "✅ SWE-Agent CLI available" || echo "⚠️ SWE-Agent CLI not available"
-RUN python3 -c "import sweagent; print('✅ SWE-Agent Python package available')" || echo "⚠️ SWE-Agent Python package not available"
+RUN python -c "import sweagent; print('✅ SWE-Agent Python package available')" || echo "⚠️ SWE-Agent Python package not available"
 RUN node --version && npm --version
 
 # Entry point for GitHub Action
