@@ -88,7 +88,7 @@ jobs:
         run: |
           case "${{ github.event.inputs.provider_test }}" in
             "openai")
-              model="gpt-4.1-mini"
+              model="gpt-4o-mini"
               fallback="gpt-3.5-turbo"
               cost="3.00"
               ;;
@@ -98,7 +98,7 @@ jobs:
               cost="1.50"
               ;;
             "multi_provider_fallback")
-              model="gpt-4.1-mini"
+              model="gpt-4o-mini"
               fallback="deepseek/deepseek-chat,gpt-3.5-turbo"
               cost="5.00"
               ;;
@@ -115,22 +115,8 @@ jobs:
           model_name: ${{ steps.provider_config.outputs.model_name }}
           trigger_phrase: '@swe-agent'
           max_cost: ${{ steps.provider_config.outputs.max_cost }}
-          fallback_models: ${{ steps.provider_config.outputs.fallback_models }}
-          allowed_tools: 'str_replace_editor,bash,file_viewer,python_executor,git_tool'
-          workspace_timeout: '2400'  # 40 minutes for complex demos
+          tools: 'str_replace_editor,bash'
           debug_mode: ${{ github.event.inputs.debug_level }}
-          custom_instructions: |
-            Demo scenario: ${{ github.event.inputs.demo_scenario }}
-            Provider test: ${{ github.event.inputs.provider_test }}
-            
-            Please provide:
-            1. Detailed analysis with specific examples
-            2. Cost-benefit analysis of suggestions
-            3. Step-by-step implementation guidance
-            4. Performance impact estimates
-            5. Risk assessment for any changes
-            
-            Focus on practical, actionable insights that demonstrate the full capabilities of the SWE-Agent system.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -149,10 +135,8 @@ jobs:
           echo "- **Debug Mode**: ${{ github.event.inputs.debug_level }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📈 Execution Results" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status**: ${{ steps.swe_demo.outputs.execution_status || 'Unknown' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Provider Used**: ${{ steps.swe_demo.outputs.provider_used || 'Unknown' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Actual Cost**: ${{ steps.swe_demo.outputs.cost_estimate || 'Unknown' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Patch Applied**: ${{ steps.swe_demo.outputs.patch_applied || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ steps.swe_demo.outputs.status || 'Unknown' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cost Estimate**: ${{ steps.swe_demo.outputs.cost_estimate || 'Unknown' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Comment URL**: ${{ steps.swe_demo.outputs.comment_url || 'N/A' }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
@@ -185,7 +169,7 @@ jobs:
           echo "### 🎯 Demo Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          if [ "${{ steps.swe_demo.outputs.execution_status }}" = "success" ]; then
+          if [ "${{ steps.swe_demo.outputs.status }}" = "success" ]; then
             echo "✅ **Demo completed successfully!**" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "The SWE-Agent demonstrated:" >> $GITHUB_STEP_SUMMARY

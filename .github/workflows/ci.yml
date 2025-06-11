@@ -81,15 +81,20 @@ jobs:
           
       - name: Check action structure
         run: |
-          echo "📁 Validating action structure..."
+          echo "📁 Validating lightweight wrapper structure..."
           
-          # Check required files
+          # Check required files for lightweight wrapper
           required_files=(
             "action.yml"
             "Dockerfile" 
             "package.json"
-            "src/index.js"
             "action/entrypoint.js"
+            "action/swe-agent-runner.js"
+            "action/github-integration.js"
+            "src/config-builder.js"
+            "src/result-parser.js"
+            "utils/logger.js"
+            "utils/environment.js"
           )
           
           for file in "${required_files[@]}"; do
@@ -105,6 +110,7 @@ jobs:
           required_dirs=(
             "src"
             "action" 
+            "utils"
             "test"
           )
           
@@ -121,7 +127,7 @@ jobs:
         run: |
           echo "🔐 Validating environment variable handling..."
           node -e "
-            const providerManager = require('./action/provider-manager.js');
+            const configBuilder = require('./src/config-builder.js');
             const providers = [
               'OPENAI_API_KEY',
               'ANTHROPIC_API_KEY', 
@@ -141,17 +147,19 @@ jobs:
         run: |
           echo "⚙️ Testing SWE-agent configuration generation..."
           node -e "
-            const generator = require('./action/swe-agent-config-generator.js');
+            const configBuilder = require('./src/config-builder.js');
             
             // Test basic config generation
-            const config = generator.generateConfig({
-              model: 'gpt-4.1-mini',
-              maxCost: '5.00',
-              tools: ['str_replace_editor', 'bash']
+            const config = configBuilder.buildConfig({
+              model_name: 'gpt-4o-mini',
+              max_cost: '5.00',
+              tools: 'str_replace_editor,bash'
             });
             
-            if (config && config.includes('model_name')) {
+            if (config && config.model_name) {
               console.log('✅ Configuration generation working');
+              console.log('Model:', config.model_name);
+              console.log('Tools:', config.tools);
             } else {
               console.error('❌ Configuration generation failed');
               process.exit(1);

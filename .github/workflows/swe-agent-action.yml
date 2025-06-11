@@ -17,7 +17,7 @@ jobs:
       - name: SWE-Agent Wrapper
         uses: nimishchaudhari/swe-agent-resolver@main
         with:
-          model_name: 'gpt-4.1-mini'
+          model_name: 'gpt-4o-mini'
           trigger_phrase: '@swe-agent'
           max_cost: '2.00'
         env:
