@@ -165,8 +165,8 @@ function logSWEAgentExecution(configPath, command, options = {}) {
   });
 }
 
-module.exports = {
-  ...logger,
+// Defensive export to ensure all logger methods are available
+const loggerExports = {
   logPerformance,
   logCost,
   logProvider,
@@ -174,3 +174,22 @@ module.exports = {
   logGitHubEvent,
   logSWEAgentExecution
 };
+
+// Add all winston logger methods
+Object.setPrototypeOf(loggerExports, logger);
+
+// Ensure critical methods are available even if logger isn't fully initialized
+if (!loggerExports.error) {
+  loggerExports.error = (...args) => console.error('[ERROR]', ...args);
+}
+if (!loggerExports.info) {
+  loggerExports.info = (...args) => console.log('[INFO]', ...args);
+}
+if (!loggerExports.warn) {
+  loggerExports.warn = (...args) => console.warn('[WARN]', ...args);
+}
+if (!loggerExports.debug) {
+  loggerExports.debug = (...args) => console.log('[DEBUG]', ...args);
+}
+
+module.exports = loggerExports;
