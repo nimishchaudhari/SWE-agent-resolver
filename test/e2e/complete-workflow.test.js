@@ -1,7 +1,7 @@
 /**
  * End-to-End Workflow Tests
  * Tests complete SWE-Agent Resolver workflows from GitHub events to final outcomes
- * 
+ *
  * NOTE: These tests require real API keys and GitHub access
  */
 
@@ -68,7 +68,7 @@ describe('Complete Workflow E2E Tests', () => {
   });
 
   beforeEach(() => {
-    if (SKIP_E2E_TESTS) return;
+    if (SKIP_E2E_TESTS) {return;}
 
     // Reset mocks
     jest.clearAllMocks();
@@ -99,13 +99,13 @@ describe('Complete Workflow E2E Tests', () => {
     // Create test repository
     const repoDir = path.join(testWorkspace, 'test-repo');
     await fs.mkdir(repoDir, { recursive: true });
-    
+
     // Add sample files
     await fs.writeFile(
       path.join(repoDir, 'README.md'),
       '# Test Repository\n\nThis is a test repository for SWE-Agent.\n'
     );
-    
+
     await fs.writeFile(
       path.join(repoDir, 'bug.js'),
       `// Sample file with a bug
@@ -122,8 +122,8 @@ module.exports = { divide };
 
   describe('Issue Comment Workflow', () => {
     test('should process issue comment request end-to-end', async () => {
-      if (SKIP_E2E_TESTS) return;
-      
+      if (SKIP_E2E_TESTS) {return;}
+
       const scenario = {
         eventName: 'issue_comment',
         modelName: 'gpt-3.5-turbo',
@@ -207,7 +207,7 @@ module.exports = { divide };
 
   describe('Pull Request Review Workflow', () => {
     test('should process PR review request end-to-end', async () => {
-      if (SKIP_E2E_TESTS) return;
+      if (SKIP_E2E_TESTS) {return;}
 
       const scenario = {
         eventName: 'pull_request',
@@ -269,7 +269,7 @@ module.exports = { divide };
 
   describe('Provider Fallback Workflow', () => {
     test('should handle provider fallback correctly', async () => {
-      if (SKIP_E2E_TESTS) return;
+      if (SKIP_E2E_TESTS) {return;}
 
       const scenario = {
         eventName: 'issue_comment',
@@ -331,7 +331,7 @@ module.exports = { divide };
 
   describe('Error Handling Workflow', () => {
     test('should handle missing API keys gracefully', async () => {
-      if (SKIP_E2E_TESTS) return;
+      if (SKIP_E2E_TESTS) {return;}
 
       const scenario = {
         eventName: 'issue_comment',
@@ -360,7 +360,7 @@ module.exports = { divide };
       // Temporarily remove API keys to test error handling
       const savedKeys = {};
       const apiKeys = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'DEEPSEEK_API_KEY'];
-      
+
       apiKeys.forEach(key => {
         savedKeys[key] = process.env[key];
         delete process.env[key];
@@ -390,7 +390,7 @@ module.exports = { divide };
 
       // Should create an error comment
       expect(mockOctokit.rest.issues.createComment).toHaveBeenCalled();
-      
+
       const createCommentCall = mockOctokit.rest.issues.createComment.mock.calls[0][0];
       expect(createCommentCall.body).toContain('🤖 SWE-Agent Status');
 
@@ -406,7 +406,7 @@ module.exports = { divide };
 
   describe('Workspace Management', () => {
     test('should create and cleanup workspace properly', async () => {
-      if (SKIP_E2E_TESTS) return;
+      if (SKIP_E2E_TESTS) {return;}
 
       const scenario = {
         eventName: 'issue_comment',
@@ -437,7 +437,7 @@ module.exports = { divide };
       // Track workspace creation
       let workspaceCreated = false;
       const originalMkdtemp = fs.mkdtemp;
-      
+
       // Don't actually mock this as it would break real functionality
       // Just verify that workspace operations happen
 
@@ -457,7 +457,7 @@ module.exports = { divide };
 
   describe('Configuration Generation', () => {
     test('should generate valid SWE-agent configuration', async () => {
-      if (SKIP_E2E_TESTS) return;
+      if (SKIP_E2E_TESTS) {return;}
 
       const scenario = {
         eventName: 'issue_comment',
@@ -507,7 +507,7 @@ module.exports = { divide };
       // Validate YAML structure
       const yaml = require('js-yaml');
       const parsedConfig = yaml.load(sweConfig);
-      
+
       expect(parsedConfig.problem_statement).toBeDefined();
       expect(parsedConfig.agent).toBeDefined();
       expect(parsedConfig.agent.model).toBeDefined();

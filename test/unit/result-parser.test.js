@@ -93,7 +93,7 @@ describe('ResultParser', () => {
       };
 
       const changes = resultParser.extractFileChanges(result);
-      
+
       expect(changes.length).toBeGreaterThan(0);
       expect(changes.some(c => c.path === 'auth.js')).toBe(true);
     });
@@ -117,7 +117,7 @@ describe('ResultParser', () => {
       };
 
       const cost = resultParser.estimateCost('gpt-4o-mini', result);
-      
+
       expect(cost).toBeGreaterThan(0);
       expect(cost).toBeLessThan(1); // Should be reasonable for small output
     });

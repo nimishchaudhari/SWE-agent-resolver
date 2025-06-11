@@ -14,7 +14,7 @@ describe('ConfigBuilder', () => {
   describe('build', () => {
     it('should build basic configuration with OpenAI', () => {
       process.env.OPENAI_API_KEY = 'test-key';
-      
+
       const inputs = {
         model: 'gpt-4o-mini',
         maxCost: '5.00',
@@ -31,7 +31,7 @@ describe('ConfigBuilder', () => {
 
     it('should use default tools when none specified', () => {
       process.env.OPENAI_API_KEY = 'test-key';
-      
+
       const inputs = { model: 'gpt-4o-mini' };
       const config = configBuilder.build(inputs);
 
@@ -40,7 +40,7 @@ describe('ConfigBuilder', () => {
 
     it('should throw error when API key is missing', () => {
       const inputs = { model: 'gpt-4o-mini' };
-      
+
       expect(() => configBuilder.build(inputs)).toThrow('OPENAI_API_KEY environment variable is required');
     });
   });
@@ -48,21 +48,21 @@ describe('ConfigBuilder', () => {
   describe('resolveApiKey', () => {
     it('should resolve OpenAI API key for GPT models', () => {
       process.env.OPENAI_API_KEY = 'openai-key';
-      
+
       const key = configBuilder.resolveApiKey('gpt-4o-mini');
       expect(key).toBe('openai-key');
     });
 
     it('should resolve Anthropic API key for Claude models', () => {
       process.env.ANTHROPIC_API_KEY = 'anthropic-key';
-      
+
       const key = configBuilder.resolveApiKey('claude-3-5-sonnet-latest');
       expect(key).toBe('anthropic-key');
     });
 
     it('should resolve DeepSeek API key for DeepSeek models', () => {
       process.env.DEEPSEEK_API_KEY = 'deepseek-key';
-      
+
       const key = configBuilder.resolveApiKey('deepseek/deepseek-chat');
       expect(key).toBe('deepseek-key');
     });

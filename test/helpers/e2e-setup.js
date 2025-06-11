@@ -12,12 +12,12 @@ const E2E_CONFIG = {
 beforeAll(async () => {
   // Create test repository
   await fs.mkdir(E2E_CONFIG.testRepoPath, { recursive: true });
-  
+
   // Initialize git repo for testing
   execSync('git init', { cwd: E2E_CONFIG.testRepoPath });
   execSync('git config user.email "test@example.com"', { cwd: E2E_CONFIG.testRepoPath });
   execSync('git config user.name "Test User"', { cwd: E2E_CONFIG.testRepoPath });
-  
+
   // Create initial commit
   await fs.writeFile(
     path.join(E2E_CONFIG.testRepoPath, 'README.md'),

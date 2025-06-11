@@ -18,7 +18,7 @@ async function runLocalTest(scenario = 'issue_comment') {
     // Load test environment
     const envPath = path.join(__dirname, '..', '.env.test.local');
     const envExists = await fs.access(envPath).then(() => true).catch(() => false);
-    
+
     if (!envExists) {
       console.log('⚠️  No .env.test.local found. Creating from template...');
       await fs.copyFile(
@@ -35,7 +35,7 @@ async function runLocalTest(scenario = 'issue_comment') {
     // Validate required environment variables
     const requiredVars = ['GITHUB_TOKEN'];
     const missingVars = requiredVars.filter(v => !process.env[v]);
-    
+
     if (missingVars.length > 0) {
       console.error('❌ Missing required environment variables:', missingVars.join(', '));
       console.log('\nPlease update .env.test.local with your values.');
@@ -50,7 +50,7 @@ async function runLocalTest(scenario = 'issue_comment') {
       'OPENROUTER_API_KEY',
       'GROQ_API_KEY'
     ];
-    
+
     const hasProvider = providerKeys.some(key => process.env[key]);
     if (!hasProvider) {
       console.error('❌ No AI provider API key found!');
@@ -66,7 +66,7 @@ async function runLocalTest(scenario = 'issue_comment') {
     console.log(`  Trigger: ${process.env.INPUT_TRIGGER_PHRASE || '@swe-agent'}`);
     console.log(`  Max Cost: $${process.env.INPUT_MAX_COST || '5.00'}`);
     console.log(`  Debug Mode: ${process.env.INPUT_DEBUG_MODE || 'false'}`);
-    
+
     // Show available providers
     console.log('\n🔌 Available Providers:');
     providerKeys.forEach(key => {
@@ -79,35 +79,35 @@ async function runLocalTest(scenario = 'issue_comment') {
     // Create test event based on scenario
     let eventData;
     switch (scenario) {
-      case 'issue_comment':
-        eventData = TestUtils.createMockEvent('issue_comment', {
-          comment: {
-            body: `${process.env.INPUT_TRIGGER_PHRASE || '@swe-agent'} analyze this issue and suggest a fix`
-          }
-        });
-        break;
-      
-      case 'pr_review':
-        eventData = TestUtils.createMockEvent('pull_request', {
-          action: 'opened'
-        });
-        process.env.GITHUB_EVENT_NAME = 'pull_request';
-        break;
-      
-      case 'issue_opened':
-        eventData = TestUtils.createMockEvent('issues', {
-          action: 'opened'
-        });
-        process.env.GITHUB_EVENT_NAME = 'issues';
-        break;
-      
-      default:
-        console.error(`❌ Unknown scenario: ${scenario}`);
-        console.log('\nAvailable scenarios:');
-        console.log('  - issue_comment (default)');
-        console.log('  - pr_review');
-        console.log('  - issue_opened');
-        process.exit(1);
+    case 'issue_comment':
+      eventData = TestUtils.createMockEvent('issue_comment', {
+        comment: {
+          body: `${process.env.INPUT_TRIGGER_PHRASE || '@swe-agent'} analyze this issue and suggest a fix`
+        }
+      });
+      break;
+
+    case 'pr_review':
+      eventData = TestUtils.createMockEvent('pull_request', {
+        action: 'opened'
+      });
+      process.env.GITHUB_EVENT_NAME = 'pull_request';
+      break;
+
+    case 'issue_opened':
+      eventData = TestUtils.createMockEvent('issues', {
+        action: 'opened'
+      });
+      process.env.GITHUB_EVENT_NAME = 'issues';
+      break;
+
+    default:
+      console.error(`❌ Unknown scenario: ${scenario}`);
+      console.log('\nAvailable scenarios:');
+      console.log('  - issue_comment (default)');
+      console.log('  - pr_review');
+      console.log('  - issue_opened');
+      process.exit(1);
     }
 
     // Write event data to temporary file
@@ -116,11 +116,11 @@ async function runLocalTest(scenario = 'issue_comment') {
 
     // Run the action
     console.log('🚀 Running SWE-Agent Action...\n');
-    
+
     // Import and run the action
     const SWEAgentAction = require('../action/entrypoint');
     const action = new SWEAgentAction();
-    
+
     // Override logger for better local output
     action.logger = {
       log: (...args) => console.log('  ', ...args),
@@ -128,9 +128,9 @@ async function runLocalTest(scenario = 'issue_comment') {
     };
 
     await action.run();
-    
+
     console.log('\n✅ Test completed successfully!');
-    
+
     // Cleanup
     await fs.unlink(eventPath).catch(() => {});
 

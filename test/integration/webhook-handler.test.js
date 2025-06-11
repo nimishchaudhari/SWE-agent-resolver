@@ -15,7 +15,7 @@ describe('Webhook Handler Integration', () => {
       INPUT_MAX_COST: '5.00',
       INPUT_DEBUG_MODE: 'false'
     });
-    
+
     // Mock GitHub API base
     nock('https://api.github.com')
       .persist()
@@ -90,7 +90,7 @@ describe('Webhook Handler Integration', () => {
 
     test('should handle custom trigger phrase', async () => {
       process.env.INPUT_TRIGGER_PHRASE = '@ai-assistant';
-      
+
       const eventData = {
         ...fixtures.webhooks.issueComment,
         comment: {
@@ -164,7 +164,7 @@ describe('Webhook Handler Integration', () => {
   describe('Error Handling', () => {
     test('should handle missing API key', async () => {
       delete process.env.OPENAI_API_KEY;
-      
+
       const eventData = fixtures.webhooks.issueComment;
       const eventPath = await TestUtils.createTempEventFile(eventData);
       process.env.GITHUB_EVENT_PATH = eventPath;
@@ -172,7 +172,7 @@ describe('Webhook Handler Integration', () => {
 
       // Mock error comment
       const errorMock = nock('https://api.github.com')
-        .post('/repos/test-owner/test-repo/issues/123/comments', 
+        .post('/repos/test-owner/test-repo/issues/123/comments',
           body => body.body.includes('Missing API key'))
         .reply(201, { id: 55555 });
 
@@ -209,7 +209,7 @@ describe('Webhook Handler Integration', () => {
     test('should work with Anthropic model', async () => {
       process.env.INPUT_MODEL_NAME = 'claude-3-5-sonnet-latest';
       process.env.ANTHROPIC_API_KEY = 'sk-ant-' + 'a'.repeat(95);
-      
+
       const eventData = fixtures.webhooks.issueComment;
       const eventPath = await TestUtils.createTempEventFile(eventData);
       process.env.GITHUB_EVENT_PATH = eventPath;
@@ -231,7 +231,7 @@ describe('Webhook Handler Integration', () => {
     test('should work with DeepSeek model', async () => {
       process.env.INPUT_MODEL_NAME = 'deepseek/deepseek-chat';
       process.env.DEEPSEEK_API_KEY = 'sk-' + 'a'.repeat(48);
-      
+
       const eventData = fixtures.webhooks.issueComment;
       const eventPath = await TestUtils.createTempEventFile(eventData);
       process.env.GITHUB_EVENT_PATH = eventPath;
@@ -282,7 +282,7 @@ describe('Webhook Handler Integration', () => {
 
     test('should respect max cost limit', async () => {
       process.env.INPUT_MAX_COST = '0.50';
-      
+
       const eventData = fixtures.webhooks.issueComment;
       const eventPath = await TestUtils.createTempEventFile(eventData);
       process.env.GITHUB_EVENT_PATH = eventPath;

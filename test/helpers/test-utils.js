@@ -97,7 +97,7 @@ class TestUtils {
 
   static mockEnvironment(env = {}) {
     const originalEnv = { ...process.env };
-    
+
     Object.assign(process.env, {
       GITHUB_TOKEN: 'test-token',
       GITHUB_REPOSITORY: 'test-owner/test-repo',

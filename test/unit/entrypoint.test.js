@@ -17,7 +17,7 @@ describe('SWEAgentAction', () => {
   beforeEach(() => {
     // Reset all mocks
     jest.clearAllMocks();
-    
+
     // Mock core inputs
     mockCore.getInput.mockImplementation((name) => {
       const inputs = {
@@ -62,7 +62,7 @@ describe('SWEAgentAction', () => {
   describe('parseGitHubEvent', () => {
     it('should parse issue comment event', () => {
       const event = action.parseGitHubEvent();
-      
+
       expect(event.type).toBe('issue_comment');
       expect(event.trigger).toBe('@swe-agent help with this bug');
       expect(event.issueNumber).toBe(123);
@@ -75,10 +75,10 @@ describe('SWEAgentAction', () => {
         issue: { number: 456, title: 'New issue' },
         repository: { full_name: 'test/repo' }
       };
-      
+
       action = new SWEAgentAction();
       const event = action.parseGitHubEvent();
-      
+
       expect(event.type).toBe('issue');
       expect(event.issueNumber).toBe(456);
     });
@@ -86,7 +86,7 @@ describe('SWEAgentAction', () => {
     it('should throw error for unsupported event type', () => {
       mockGithub.context.eventName = 'push';
       action = new SWEAgentAction();
-      
+
       expect(() => action.parseGitHubEvent()).toThrow('Unsupported event type: push');
     });
   });
@@ -97,7 +97,7 @@ describe('SWEAgentAction', () => {
         type: 'issue_comment',
         trigger: '@swe-agent help with this'
       };
-      
+
       expect(action.shouldProcess(event)).toBe(true);
     });
 
@@ -106,14 +106,14 @@ describe('SWEAgentAction', () => {
         type: 'issue_comment',
         trigger: 'regular comment without trigger'
       };
-      
+
       expect(action.shouldProcess(event)).toBe(false);
     });
 
     it('should process new issues', () => {
       mockGithub.context.payload.action = 'opened';
       action = new SWEAgentAction();
-      
+
       const event = { type: 'issue' };
       expect(action.shouldProcess(event)).toBe(true);
     });
@@ -123,7 +123,7 @@ describe('SWEAgentAction', () => {
     it('should format API key error', () => {
       const error = new Error('Missing API key for OpenAI');
       const message = action.formatErrorMessage(error);
-      
+
       expect(message).toContain('Configuration Error');
       expect(message).toContain('API key');
     });
@@ -131,7 +131,7 @@ describe('SWEAgentAction', () => {
     it('should format timeout error', () => {
       const error = new Error('Command timeout exceeded');
       const message = action.formatErrorMessage(error);
-      
+
       expect(message).toContain('Timeout');
     });
 
@@ -139,14 +139,14 @@ describe('SWEAgentAction', () => {
       const error = new Error('Permission denied');
       error.code = 'EACCES';
       const message = action.formatErrorMessage(error);
-      
+
       expect(message).toContain('Permission Error');
     });
 
     it('should format generic error', () => {
       const error = new Error('Something went wrong');
       const message = action.formatErrorMessage(error);
-      
+
       expect(message).toContain('Execution Error');
       expect(message).toContain('Something went wrong');
     });
