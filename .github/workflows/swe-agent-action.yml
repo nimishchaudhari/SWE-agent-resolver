@@ -15,7 +15,7 @@ jobs:
     
     steps:
       - name: SWE-Agent Wrapper
-        uses: nimishchaudhari/swe-agent-resolver@v1
+        uses: nimishchaudhari/swe-agent-resolver@main
         with:
           model_name: 'gpt-4.1-mini'
           trigger_phrase: '@swe-agent'
