@@ -155,7 +155,7 @@ class ErrorHandler {
       const isRetry = i > 0;
       
       try {
-        this.logger.log(`${isRetry ? '🔄 Fallback' : '🚀 Primary'} attempt with model: ${currentModel}`);
+        this.logger.info(`${isRetry ? '🔄 Fallback' : '🚀 Primary'} attempt with model: ${currentModel}`);
         
         // Update context with current model
         const modelContext = { ...context, currentModel, isRetry };
@@ -170,7 +170,7 @@ class ErrorHandler {
         result.wasRetry = isRetry;
         result.totalCost = totalCost + (result.cost || 0);
         
-        this.logger.log(`✅ Success with ${currentModel} (${providerInfo.provider})`);
+        this.logger.info(`✅ Success with ${currentModel} (${providerInfo.provider})`);
         return result;
         
       } catch (error) {
@@ -192,14 +192,14 @@ class ErrorHandler {
         }
         
         if (!this.shouldFallback(errorType)) {
-          this.logger.log(`🚫 Error type '${errorType}' not suitable for fallback`);
+          this.logger.info(`🚫 Error type '${errorType}' not suitable for fallback`);
           break;
         }
         
         // Add delay before trying next model
         const delay = this.calculateFallbackDelay(i, errorType);
         if (delay > 0) {
-          this.logger.log(`⏳ Waiting ${delay}ms before fallback...`);
+          this.logger.info(`⏳ Waiting ${delay}ms before fallback...`);
           await this.sleep(delay);
         }
       }
@@ -226,7 +226,7 @@ class ErrorHandler {
     for (let attempt = 0; attempt <= retryPolicy.maxRetries; attempt++) {
       try {
         if (attempt > 0) {
-          this.logger.log(`🔄 Retry ${attempt}/${retryPolicy.maxRetries} for ${modelName}`);
+          this.logger.info(`🔄 Retry ${attempt}/${retryPolicy.maxRetries} for ${modelName}`);
         }
         
         const result = await operation(modelName, { ...context, attempt });
@@ -243,7 +243,7 @@ class ErrorHandler {
         
         // Calculate delay for next retry
         const delay = this.calculateRetryDelay(attempt, retryPolicy, errorType);
-        this.logger.log(`⏳ Retrying in ${delay}ms (error: ${errorType})`);
+        this.logger.info(`⏳ Retrying in ${delay}ms (error: ${errorType})`);
         await this.sleep(delay);
       }
     }

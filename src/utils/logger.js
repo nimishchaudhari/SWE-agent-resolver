@@ -178,6 +178,9 @@ const loggerExports = {
 // Add all winston logger methods
 Object.setPrototypeOf(loggerExports, logger);
 
+// Add common aliases for compatibility
+loggerExports.log = logger.info.bind(logger);
+
 // Ensure critical methods are available even if logger isn't fully initialized
 if (!loggerExports.error) {
   loggerExports.error = (...args) => console.error('[ERROR]', ...args);
@@ -190,6 +193,9 @@ if (!loggerExports.warn) {
 }
 if (!loggerExports.debug) {
   loggerExports.debug = (...args) => console.log('[DEBUG]', ...args);
+}
+if (!loggerExports.log) {
+  loggerExports.log = (...args) => console.log('[LOG]', ...args);
 }
 
 module.exports = loggerExports;
