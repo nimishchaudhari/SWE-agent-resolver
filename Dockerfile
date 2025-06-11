@@ -78,7 +78,7 @@ ENV CI=true
 ENV SWE_AGENT_WORKSPACE=/swe-agent-workspace
 ENV SWE_AGENT_CACHE_DIR=/tmp/swe-agent-cache
 
-# Switch to vscode user for verification and runtime (matches devcontainer setup)
+# Switch to vscode user for verification, then back to root for GitHub Actions
 USER vscode
 
 # Verify installations with proper environment
@@ -86,6 +86,12 @@ RUN python -c "import litellm; print('✅ LiteLLM installed successfully')"
 RUN sweagent --help > /dev/null && echo "✅ SWE-Agent CLI available" || echo "⚠️ SWE-Agent CLI not available"
 RUN python -c "import sweagent; print('✅ SWE-Agent Python package available')" || echo "⚠️ SWE-Agent Python package not available"
 RUN node --version && npm --version
+
+# Switch back to root for GitHub Actions compatibility (required for file_commands access)
+USER root
+
+# Ensure GitHub Actions has proper permissions
+RUN mkdir -p /github/file_commands && chmod 777 /github/file_commands
 
 # Entry point for GitHub Action
 ENTRYPOINT ["node", "/action/src/index.js"]

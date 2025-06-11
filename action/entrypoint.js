@@ -461,13 +461,31 @@ class SWEAgentAction {
   }
 
   /**
-   * Set GitHub Action output
+   * Set GitHub Action output with error handling for file permissions
    */
   setOutput(name, value) {
     if (typeof core !== 'undefined' && core.setOutput) {
-      core.setOutput(name, value);
+      try {
+        core.setOutput(name, value);
+      } catch (error) {
+        // Handle permission errors with GitHub Actions file_commands
+        if (error.code === 'EACCES' && error.path && error.path.includes('/github/file_commands')) {
+          this.logger.warn(`⚠️ Cannot write to GitHub file_commands, output ${name} will be logged only:`, error.message);
+          this.logger.info(`Output ${name}: ${value}`);
+          
+          // Try alternative output method
+          try {
+            process.env[`GITHUB_OUTPUT_${name.toUpperCase()}`] = value;
+          } catch (envError) {
+            this.logger.warn(`Cannot set environment variable fallback:`, envError.message);
+          }
+        } else {
+          this.logger.error(`❌ Failed to set GitHub Action output ${name}:`, error);
+          this.logger.info(`Output ${name}: ${value}`);
+        }
+      }
     } else {
-      this.logger.log(`Output ${name}: ${value}`);
+      this.logger.info(`Output ${name}: ${value}`);
     }
   }
 }

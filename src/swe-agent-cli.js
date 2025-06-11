@@ -347,7 +347,7 @@ class SWEAgentCLI {
 
       // Build SWE-agent command (prefer sweagent CLI, fallback to python -m)
       const cmd = [
-        'sweagent',
+        'sweagent', 'run',  // Add 'run' subcommand for SWE-agent v1.1.0+
         '--config_file', configPath,
         '--model_name', 'from_config', // Use model from config
         '--data_path', problemPath,
@@ -358,7 +358,7 @@ class SWEAgentCLI {
       
       // Fallback command if sweagent CLI not available
       const fallbackCmd = [
-        'python3', '-m', 'sweagent',
+        'python3', '-m', 'sweagent', 'run',  // Add 'run' subcommand for fallback too
         '--config_file', configPath,
         '--model_name', 'from_config',
         '--data_path', problemPath,

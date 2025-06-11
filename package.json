@@ -9,7 +9,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:integration": "jest --testPathPattern=integration",
+    "test:integration": "jest --testPathPattern=integration --forceExit --detectOpenHandles",
     "test:unit": "jest --testPathPattern=unit",
     "test:real": "jest --testPathPattern=real",
     "test:e2e": "jest --testPathPattern=e2e",

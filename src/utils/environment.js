@@ -100,9 +100,31 @@ function setupLogging() {
       if (!fs.existsSync(logDir)) {
         fs.mkdirSync(logDir, { recursive: true });
       }
+      // Test write permissions on fallback directory
+      const testFile = path.join(logDir, '.test-write');
+      fs.writeFileSync(testFile, 'test');
+      fs.unlinkSync(testFile);
     } catch (fallbackError) {
       console.warn(`Cannot create fallback logs directory, using /var/log/swe-agent:`, fallbackError.message);
       logDir = '/var/log/swe-agent';
+      
+      // Final fallback - if even /var/log/swe-agent fails, use current working directory
+      try {
+        if (!fs.existsSync(logDir)) {
+          fs.mkdirSync(logDir, { recursive: true });
+        }
+      } catch (finalError) {
+        console.warn(`Cannot create /var/log/swe-agent, using current directory:`, finalError.message);
+        logDir = path.join(process.cwd(), 'logs');
+        try {
+          if (!fs.existsSync(logDir)) {
+            fs.mkdirSync(logDir, { recursive: true });
+          }
+        } catch (lastError) {
+          console.error(`All log directory fallbacks failed, logs will be disabled:`, lastError.message);
+          logDir = null;
+        }
+      }
     }
   }
   
