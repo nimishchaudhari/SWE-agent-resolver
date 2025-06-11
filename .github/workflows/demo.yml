@@ -1,0 +1,207 @@
+name: SWE-Agent Demo & Performance Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      demo_scenario:
+        description: 'Demo scenario to run'
+        required: true
+        default: 'code_analysis'
+        type: choice
+        options:
+          - 'code_analysis'
+          - 'bug_detection' 
+          - 'security_review'
+          - 'performance_optimization'
+          - 'refactoring_suggestions'
+          - 'test_generation'
+          - 'cost_comparison'
+      provider_test:
+        description: 'AI provider to test'
+        required: true
+        default: 'openai'
+        type: choice
+        options:
+          - 'openai'
+          - 'deepseek'
+          - 'multi_provider_fallback'
+      debug_level:
+        description: 'Debug level (true for detailed logs)'
+        required: false
+        default: 'true'
+        type: boolean
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    name: SWE-Agent Demo (${{ github.event.inputs.demo_scenario }})
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Demo Setup
+        run: |
+          echo "🎬 Setting up SWE-Agent demo environment"
+          echo "📋 Demo Configuration:"
+          echo "- Scenario: ${{ github.event.inputs.demo_scenario }}"
+          echo "- Provider: ${{ github.event.inputs.provider_test }}"
+          echo "- Debug: ${{ github.event.inputs.debug_level }}"
+          echo "- Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          
+      - name: Prepare demo command
+        id: demo_cmd
+        run: |
+          case "${{ github.event.inputs.demo_scenario }}" in
+            "code_analysis")
+              cmd="@swe-agent analyze the codebase structure and identify potential improvements"
+              ;;
+            "bug_detection")
+              cmd="@swe-agent scan the code for potential bugs and security vulnerabilities"
+              ;;
+            "security_review")
+              cmd="@swe-agent perform a comprehensive security review of the authentication and API handling"
+              ;;
+            "performance_optimization")
+              cmd="@swe-agent analyze performance bottlenecks and suggest optimizations"
+              ;;
+            "refactoring_suggestions")
+              cmd="@swe-agent suggest refactoring opportunities to improve code maintainability"
+              ;;
+            "test_generation")
+              cmd="@swe-agent generate comprehensive unit tests for the core components"
+              ;;
+            "cost_comparison")
+              cmd="@swe-agent analyze the cost-effectiveness of different AI providers for this project"
+              ;;
+          esac
+          echo "demo_command=$cmd" >> $GITHUB_OUTPUT
+          echo "📝 Demo command: $cmd"
+          
+      - name: Configure provider settings
+        id: provider_config
+        run: |
+          case "${{ github.event.inputs.provider_test }}" in
+            "openai")
+              model="gpt-4.1-mini"
+              fallback="gpt-3.5-turbo"
+              cost="3.00"
+              ;;
+            "deepseek")
+              model="deepseek/deepseek-chat"
+              fallback="deepseek/deepseek-coder,gpt-3.5-turbo"
+              cost="1.50"
+              ;;
+            "multi_provider_fallback")
+              model="gpt-4.1-mini"
+              fallback="deepseek/deepseek-chat,gpt-3.5-turbo"
+              cost="5.00"
+              ;;
+          esac
+          echo "model_name=$model" >> $GITHUB_OUTPUT
+          echo "fallback_models=$fallback" >> $GITHUB_OUTPUT
+          echo "max_cost=$cost" >> $GITHUB_OUTPUT
+          echo "⚙️ Provider config: $model (fallback: $fallback, budget: $cost)"
+          
+      - name: Run SWE-Agent Demo
+        id: swe_demo
+        uses: ./
+        with:
+          model_name: ${{ steps.provider_config.outputs.model_name }}
+          trigger_phrase: '@swe-agent'
+          max_cost: ${{ steps.provider_config.outputs.max_cost }}
+          fallback_models: ${{ steps.provider_config.outputs.fallback_models }}
+          allowed_tools: 'str_replace_editor,bash,file_viewer,python_executor,git_tool'
+          workspace_timeout: '2400'  # 40 minutes for complex demos
+          debug_mode: ${{ github.event.inputs.debug_level }}
+          custom_instructions: |
+            Demo scenario: ${{ github.event.inputs.demo_scenario }}
+            Provider test: ${{ github.event.inputs.provider_test }}
+            
+            Please provide:
+            1. Detailed analysis with specific examples
+            2. Cost-benefit analysis of suggestions
+            3. Step-by-step implementation guidance
+            4. Performance impact estimates
+            5. Risk assessment for any changes
+            
+            Focus on practical, actionable insights that demonstrate the full capabilities of the SWE-Agent system.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          
+      - name: Performance Metrics
+        if: always()
+        run: |
+          echo "## 📊 SWE-Agent Demo Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎯 Demo Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- **Scenario**: ${{ github.event.inputs.demo_scenario }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Provider**: ${{ github.event.inputs.provider_test }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Model**: ${{ steps.provider_config.outputs.model_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Budget**: ${{ steps.provider_config.outputs.max_cost }} USD" >> $GITHUB_STEP_SUMMARY
+          echo "- **Debug Mode**: ${{ github.event.inputs.debug_level }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📈 Execution Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ steps.swe_demo.outputs.execution_status || 'Unknown' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Provider Used**: ${{ steps.swe_demo.outputs.provider_used || 'Unknown' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Actual Cost**: ${{ steps.swe_demo.outputs.cost_estimate || 'Unknown' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Patch Applied**: ${{ steps.swe_demo.outputs.patch_applied || 'No' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Comment URL**: ${{ steps.swe_demo.outputs.comment_url || 'N/A' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+      - name: Cost Analysis
+        if: always()
+        run: |
+          echo "### 💰 Cost Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Calculate cost efficiency
+          actual_cost="${{ steps.swe_demo.outputs.cost_estimate }}"
+          budget="${{ steps.provider_config.outputs.max_cost }}"
+          
+          if [ "$actual_cost" != "Unknown" ] && [ "$budget" != "" ]; then
+            echo "- **Budget Utilization**: ${actual_cost}/${budget} USD" >> $GITHUB_STEP_SUMMARY
+            echo "- **Provider Efficiency**: ${{ steps.provider_config.outputs.model_name }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### 📋 Cost Comparison by Provider" >> $GITHUB_STEP_SUMMARY
+          echo "| Provider | Model | Cost per 2K tokens | Best For |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|-------------------|----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| DeepSeek | deepseek-chat | $0.0004 | 🏆 Most cost-effective |" >> $GITHUB_STEP_SUMMARY
+          echo "| OpenAI | gpt-4.1-mini | $0.0033 | ⚖️ Balanced capability/cost |" >> $GITHUB_STEP_SUMMARY
+          echo "| OpenAI | gpt-3.5-turbo | $0.0005 | 🚀 Fast responses |" >> $GITHUB_STEP_SUMMARY
+          
+      - name: Demo Summary
+        if: always()
+        run: |
+          echo "### 🎯 Demo Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.swe_demo.outputs.execution_status }}" = "success" ]; then
+            echo "✅ **Demo completed successfully!**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The SWE-Agent demonstrated:" >> $GITHUB_STEP_SUMMARY
+            echo "- Real code analysis capabilities" >> $GITHUB_STEP_SUMMARY
+            echo "- Proper cost control and estimation" >> $GITHUB_STEP_SUMMARY
+            echo "- Provider fallback mechanisms" >> $GITHUB_STEP_SUMMARY
+            echo "- Comprehensive error handling" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **Demo encountered issues**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Possible causes:" >> $GITHUB_STEP_SUMMARY
+            echo "- API rate limits or provider issues" >> $GITHUB_STEP_SUMMARY
+            echo "- Budget constraints (try increasing max_cost)" >> $GITHUB_STEP_SUMMARY
+            echo "- Complex scenario requiring more time" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Ready for Production" >> $GITHUB_STEP_SUMMARY
+          echo "Comment \`@swe-agent [your request]\` on any issue or PR to get AI assistance!" >> $GITHUB_STEP_SUMMARY

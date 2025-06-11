@@ -1,0 +1,121 @@
+name: SWE-Agent Test & Demo
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request:
+    types: [opened, synchronize]
+  workflow_dispatch:  # Manual trigger for testing
+    inputs:
+      test_command:
+        description: 'Test command to execute (e.g., "@swe-agent analyze this code")'
+        required: false
+        default: '@swe-agent analyze the project structure and suggest improvements'
+      model_name:
+        description: 'AI model to use'
+        required: false
+        default: 'gpt-4.1-mini'
+        type: choice
+        options:
+          - 'gpt-4.1-mini'
+          - 'deepseek/deepseek-chat'
+          - 'gpt-3.5-turbo'
+      max_cost:
+        description: 'Maximum cost limit ($USD)'
+        required: false
+        default: '3.00'
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  swe-agent-test:
+    runs-on: ubuntu-latest
+    if: >
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@swe-agent')) ||
+      (github.event_name == 'pull_request') ||
+      (github.event_name == 'workflow_dispatch')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup test environment
+        run: |
+          echo "🚀 Setting up SWE-Agent test environment"
+          echo "Event: ${{ github.event_name }}"
+          echo "Repository: ${{ github.repository }}"
+          
+      - name: Validate environment
+        run: |
+          echo "📋 Environment validation:"
+          echo "- Node.js version: $(node --version)"
+          echo "- NPM version: $(npm --version)"
+          echo "- Docker version: $(docker --version)"
+          
+      - name: Run SWE-Agent Resolver (Local Action)
+        id: swe-agent
+        uses: ./  # Uses local action for testing
+        with:
+          # Primary model (user has OpenAI key)
+          model_name: ${{ github.event.inputs.model_name || 'gpt-4.1-mini' }}
+          trigger_phrase: '@swe-agent'
+          max_cost: ${{ github.event.inputs.max_cost || '3.00' }}
+          
+          # Cost-effective fallback chain
+          fallback_models: 'deepseek/deepseek-chat,gpt-3.5-turbo'
+          
+          # Standard tool configuration
+          allowed_tools: 'str_replace_editor,bash,file_viewer,python_executor'
+          workspace_timeout: '1200'  # 20 minutes
+          debug_mode: 'true'  # Enable for testing
+          
+          # Custom instructions for testing
+          custom_instructions: 'Focus on code quality, security, and provide detailed explanations. Include cost estimates for any suggested changes.'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+
+      - name: Test Results Summary
+        if: always()
+        run: |
+          echo "## 🤖 SWE-Agent Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: ${{ steps.swe-agent.outputs.execution_status || 'Unknown' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Provider Used**: ${{ steps.swe-agent.outputs.provider_used || 'Unknown' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Cost Estimate**: ${{ steps.swe-agent.outputs.cost_estimate || 'Unknown' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Patch Applied**: ${{ steps.swe-agent.outputs.patch_applied || 'Unknown' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Test Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- **Model**: ${{ github.event.inputs.model_name || 'gpt-4.1-mini' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Max Cost**: ${{ github.event.inputs.max_cost || '3.00' }} USD" >> $GITHUB_STEP_SUMMARY
+          echo "- **Fallbacks**: deepseek/deepseek-chat, gpt-3.5-turbo" >> $GITHUB_STEP_SUMMARY
+          echo "- **Event Type**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Cost Alert
+        if: failure()
+        run: |
+          echo "⚠️ **SWE-Agent Test Failed**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This could be due to:" >> $GITHUB_STEP_SUMMARY
+          echo "- Budget exceeded (increase max_cost)" >> $GITHUB_STEP_SUMMARY
+          echo "- API key issues (check secrets)" >> $GITHUB_STEP_SUMMARY
+          echo "- Provider unavailable (check fallback chain)" >> $GITHUB_STEP_SUMMARY
+          echo "- Invalid request format" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the action logs for detailed error information." >> $GITHUB_STEP_SUMMARY
+
+      - name: Success Notification
+        if: success()
+        run: |
+          echo "✅ **SWE-Agent Test Completed Successfully**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The SWE-Agent action is working correctly and ready for production use." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎯 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Comment \`@swe-agent\` on any issue or PR for assistance" >> $GITHUB_STEP_SUMMARY
+          echo "2. Monitor costs in the action outputs" >> $GITHUB_STEP_SUMMARY
+          echo "3. Adjust model or budget settings as needed" >> $GITHUB_STEP_SUMMARY
