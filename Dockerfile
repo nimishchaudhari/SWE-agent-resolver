@@ -23,6 +23,7 @@ WORKDIR /opt
 RUN git clone https://github.com/SWE-agent/SWE-agent.git && \
     cd SWE-agent && \
     pip install -e . && \
+    git config --system --add safe.directory /opt/SWE-agent && \
     git config --global --add safe.directory /opt/SWE-agent && \
     chown -R vscode:vscode /opt/SWE-agent
 
@@ -82,6 +83,9 @@ ENV SWE_AGENT_CACHE_DIR=/tmp/swe-agent-cache
 # Switch to vscode user for verification, then back to root for GitHub Actions
 USER vscode
 
+# Configure git safe directory for vscode user as well
+RUN git config --global --add safe.directory /opt/SWE-agent
+
 # Verify installations with proper environment
 RUN python -c "import litellm; print('✅ LiteLLM installed successfully')"
 RUN sweagent --help > /dev/null && echo "✅ SWE-Agent CLI available" || echo "⚠️ SWE-Agent CLI not available"
@@ -90,6 +94,9 @@ RUN node --version && npm --version
 
 # Switch back to root for GitHub Actions compatibility (required for file_commands access)
 USER root
+
+# Configure git safe directory for root user as well
+RUN git config --global --add safe.directory /opt/SWE-agent
 
 # Ensure GitHub Actions has proper permissions
 RUN mkdir -p /github/file_commands && chmod 777 /github/file_commands
